@@ -1,10 +1,15 @@
 # Odyssey
 
-> *Odyssey*: A journey through robotic infrastructure; the ILIAD lab's stack for robotic demonstration collection, policy training, perception, and natural language.
+> *Odyssey*: A journey through robotic infrastructure; the ILIAD lab's stack for robotic demonstration collection, 
+> policy training, perception, and natural language.
 
-Repository containing code and experiments for the Odyssey project. Built with
+Repository containing package source for Odyssey, the ILIAD lab's stack for real-world robotics, including perception and
+natural language handling. Built with [Polymetis](https://facebookresearch.github.io/fairo/polymetis/), 
 [PyTorch](https://pytorch.org/), using [Anaconda](https://www.anaconda.com/) for python dependencies and sane quality
 defaults (`black`, `isort`, `flake8`, `precommit`).
+
+Note: This will eventually be rewritten as a PyPI-enabled package, with a `setup.py` to handle dependency management. The
+source here is mostly for nightly development. 
 
 ---
 
@@ -39,7 +44,7 @@ environment, and running `pre-commit install` to start developing (if you develo
 
 ### Local Development - Linux w/ GPU & CUDA 11.3
 
-Note: Assumes that `conda` (Miniconda or Anaconda are both fine) is installed and on your path.
+Note: Assumes that `conda` (Miniconda, MiniForge, or Anaconda are all fine) is installed and on your path.
 
 Ensure that you're using the appropriate `environment-<gpu | cpu>.yaml` file --> if PyTorch doesn't build properly for
 your setup, checking the CUDA Toolkit is usually a good place to start. We have `environment-<gpu>.yaml` files for CUDA
@@ -55,7 +60,7 @@ pre-commit install  # Important!
 
 ### Local Development - CPU (Mac OS & Linux)
 
-Note: Assumes that `conda` (Miniconda or Anaconda are both fine) is installed and on your path. Use the `-cpu`
+Note: Assumes that `conda` (Miniconda, MiniForge or Anaconda are all fine) is installed and on your path. Use the `-cpu`
 environment file.
 
 ```bash
@@ -80,16 +85,13 @@ visualization, etc.).
 High-level overview of repository file-tree (expand on this as you build out your project). This is meant to be brief,
 more detailed implementation/architectural notes should go in [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
-+ `conf` - Hydra structured configurations (`.py`) for various runs (used in lieu of `argparse` or `typed-argument-parser`)
 + `environments` - Serialized Conda Environments for both CPU and GPU (CUDA 11.3). Other architectures/CUDA toolkit
 environments can be added here as necessary.
-+ `src/` - Source Code - has all utilities for preprocessing, model definitions, trainers, and other utilities.
-    + `preprocessing/` - Preprocessing Code (fill in details for specific project).
-    + `models/` - PyTorch Modules (fill in details for specific project).
++ `odyssey/` - Package Source - has all functionality for robot interfaces, demo collection, perception, etc.
+    + `robot/` - Core robot interface implementation.
+    + `demonstration/` - Useful utilities for demonstration collection.
 + `tests/` - Tests - please unit test (& integration test) your code when possible.
-+ `train.py` - Top-Level (main) entry point to repository, for training and evaluating models. Can define additional
-top-level scripts as necessary.
-+ `Makefile` - Top-level Makefile (by default, supports `conda` serialization, and linting). Expand to your needs.
++ `Makefile` - Top-level Makefile (by default, supports `conda` serialization, and linting).
 + `.flake8` - Flake8 Configuration File (Sane Defaults).
 + `.pre-commit-config.yaml` - Pre-Commit Configuration File (Sane Defaults).
 + `pyproject.toml` - Black and isort Configuration File (Sane Defaults).
@@ -118,7 +120,7 @@ conda activate odyssey
 conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
 conda install ipython jupyter
 
-pip install black flake8 hydra-core isort matplotlib pre-commit wandb
+pip install black flake8 isort matplotlib pre-commit wandb
 
 # Install other dependencies via pip below -- conda dependencies should be added above (always conda before pip!)
 ...
@@ -134,7 +136,7 @@ conda activate odyssey
 conda install pytorch torchvision torchaudio -c pytorch
 conda install ipython jupyter
 
-pip install black flake8 hydra-core isort matplotlib pre-commit wandb
+pip install black flake8 isort matplotlib pre-commit wandb
 
 # Install other dependencies via pip below -- conda dependencies should be added above (always conda before pip!)
 ...

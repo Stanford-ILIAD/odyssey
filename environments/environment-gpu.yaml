@@ -84,7 +84,6 @@ dependencies:
   - fonttools==4.31.2
   - gitdb==4.0.9
   - gitpython==3.1.27
-  - hydra-core==1.1.1
   - identify==2.4.12
   - importlib-resources==5.4.0
   - isort==5.10.1
