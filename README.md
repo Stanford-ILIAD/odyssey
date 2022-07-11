@@ -120,7 +120,7 @@ conda activate odyssey
 conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
 conda install ipython jupyter
 
-pip install black flake8 isort matplotlib pre-commit wandb
+pip install black flake8 gym isort matplotlib pre-commit wandb
 
 # Install other dependencies via pip below -- conda dependencies should be added above (always conda before pip!)
 ...
@@ -136,7 +136,7 @@ conda activate odyssey
 conda install pytorch torchvision torchaudio -c pytorch
 conda install ipython jupyter
 
-pip install black flake8 isort matplotlib pre-commit
+pip install black flake8 gym isort matplotlib pre-commit
 
 # Install other dependencies via pip below -- conda dependencies should be added above (always conda before pip!)
 ...
