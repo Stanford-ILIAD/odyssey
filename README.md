@@ -1,15 +1,15 @@
 # Odyssey
 
-> *Odyssey*: A journey through robotic infrastructure; the ILIAD lab's stack for robotic demonstration collection, 
+> *Odyssey*: A journey through robotic infrastructure; the ILIAD lab's stack for robotic demonstration collection,
 > policy training, perception, and natural language.
 
 Repository containing package source for Odyssey, the ILIAD lab's stack for real-world robotics, including perception and
-natural language handling. Built with [Polymetis](https://facebookresearch.github.io/fairo/polymetis/), 
+natural language handling. Built with [Polymetis](https://facebookresearch.github.io/fairo/polymetis/),
 [PyTorch](https://pytorch.org/), using [Anaconda](https://www.anaconda.com/) for python dependencies and sane quality
 defaults (`black`, `isort`, `flake8`, `precommit`).
 
 Note: This will eventually be rewritten as a PyPI-enabled package, with a `setup.py` to handle dependency management. The
-source here is mostly for nightly development. 
+source here is mostly for nightly development.
 
 ---
 
@@ -136,7 +136,7 @@ conda activate odyssey
 conda install pytorch torchvision torchaudio -c pytorch
 conda install ipython jupyter
 
-pip install black flake8 isort matplotlib pre-commit wandb
+pip install black flake8 isort matplotlib pre-commit
 
 # Install other dependencies via pip below -- conda dependencies should be added above (always conda before pip!)
 ...
