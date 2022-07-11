@@ -174,7 +174,7 @@ def quat2euler(quat: np.ndarray, ordering="XYZ"):
 
 # Polymetis Environment Wrapper...
 class FrankaEnv(Env):
-    def __init__(self, home: str, hz: int, mode: str = "default", controller: str = "osc") -> None:
+    def __init__(self, home: str, hz: int, mode: str = "default", controller: str = "cartesian") -> None:
         """
         Initialize a *physical* Franka Environment, with the given home pose, PD controller gains, and camera.
 
@@ -258,11 +258,10 @@ class FrankaEnv(Env):
                 pos, ori = torch.from_numpy(action[:3]), torch.from_numpy(action[3:])
                 self.robot.update_desired_ee_pose(position=pos, orientation=ori)
             elif self.controller == "osc":
-                # Use `move_to_ee_pose` -- first 3 elements are xyz, last 4 elements are quaternion orientation...
-                print("[*] Figure out conversion from Euler to Quaternion, feed to `move_to_ee_pose`")
-                import IPython
-
-                IPython.embed()
+                # First 3 elements are xyz, last 4 elements are quaternion orientation...
+                #   =>> Note: `move_to_ee_pose` does not natively accept Tensors!
+                pos, ori = action[:3], action[3:]
+                self.robot.move_to_ee_pose(position=pos, orientation=ori)
             else:
                 raise NotImplementedError(f"Controller mode `{self.controller}` not supported!")
 
