@@ -1,5 +1,6 @@
-# Implementation Notes
-# # Controller Class 
+# Controller Class 
+import pygame
+
 class JoystickControl(object):
     def __init__(self, axis_range=2, axis_scale=3.0):
         pygame.init()
@@ -31,5 +32,12 @@ class JoystickControl(object):
         # Button Press
         a, b = self.gamepad.get_button(0), self.gamepad.get_button(1)
         x, y, stop = self.gamepad.get_button(2), self.gamepad.get_button(3), self.gamepad.get_button(7)
+        print(a)
+        print(b)
+        print(x)
+        print(y)
         
         return zs, a, b, x, y, stop
+
+if __name__ == "__main__":
+    JoystickControl()
