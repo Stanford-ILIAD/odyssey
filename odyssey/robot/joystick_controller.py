@@ -1,14 +1,19 @@
 # Controller Class 
+from pickle import TRUE
 import pygame
 
 class JoystickControl(object):
     def __init__(self, axis_range=2, axis_scale=3.0):
+        # initialize pygame module
         pygame.init()
+        # creating new joystick object called 'gamepad'
         self.gamepad = pygame.joystick.Joystick(0)
+        # initialize joystick module
         self.gamepad.init()
         self.DEADBAND, self.AXIS_RANGE, self.AXIS_SCALE = 0.1, axis_range, axis_scale
 
     def input(self):
+        print("Input")
         pygame.event.get()
         zs = []
 
@@ -30,14 +35,24 @@ class JoystickControl(object):
                 zs.append(z * self.AXIS_SCALE)
 
         # Button Press
+        # gets the current state of buttons a, b, x, y, stop?
+        
+        print("Button Press")
         a, b = self.gamepad.get_button(0), self.gamepad.get_button(1)
         x, y, stop = self.gamepad.get_button(2), self.gamepad.get_button(3), self.gamepad.get_button(7)
-        print(a)
-        print(b)
-        print(x)
-        print(y)
+
+        # Testing with Prints
+        if a == True:
+            print("Button 0 value is true")
+        elif a == False:
+            print("Button 0 value is false")
+        
+        #print(b)
+        #print(x)
+        #print(y)
         
         return zs, a, b, x, y, stop
 
 if __name__ == "__main__":
+    print("Running!")
     JoystickControl()
