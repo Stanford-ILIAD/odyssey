@@ -40,6 +40,8 @@ class FrankaEnv(Env):
         self.current_ee_pose = np.concatenate([a.numpy() for a in self.robot.get_ee_pose()])
         self.current_ee_rot = quat2euler(self.current_ee_pose[3:])
         self.current_joint_pose = self.robot.get_joint_positions().numpy()
+        
+        # TODO possibly implement move_to_ee_pose here since we can use the joystick to move to a desired end-effector position?
 
         # Create an *Impedance Controller*, with the desired gains...
         #   > Note: Feel free to add any other controller, e.g., a PD controller around joint poses.
