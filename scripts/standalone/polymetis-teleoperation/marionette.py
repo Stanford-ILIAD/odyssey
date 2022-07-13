@@ -446,9 +446,11 @@ def follow() -> None:
     env = FrankaEnv(home=cfg["home"], hz=cfg["hz"], mode=cfg["mode"])
     fixed_position, ee_orientation = env.ee_position, env.ee_orientation
 
-    # Define Follow Helper Functions => NOTE :: using Scipy Rotation methods as same API as torchcontrol Rotation + Euler
-    #   > @Sidd Remark: Shouldn't make a difference... just one less dependency to install...
-    #     But if ends up in different behavior, should run the ablation vs. DM Control's methods used in Sasha's code!
+    import IPython
+
+    IPython.embed()
+
+    # Helper functions for generating a rotation trajectory to follow (figure-eight)
     def generate_figure_eight(t: Union[float, np.ndarray]) -> np.ndarray:
         x = (np.sin(t) * np.cos(t)).reshape(-1, 1)
         y = np.sin(t).reshape(-1, 1)
