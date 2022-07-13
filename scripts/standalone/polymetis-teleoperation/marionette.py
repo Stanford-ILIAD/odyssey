@@ -459,14 +459,14 @@ def follow() -> None:
     """Follow a 3D figure-eight trajectory with the current EE controller, plotting expected vs. actual trajectories."""
 
     # === Define a few plausible configurations ===
-    # cfg = {
-    #     "id": "default-cartesian",
-    #     "home": "iris",
-    #     "hz": HZ,
-    #     "mode": "default",
-    #     "controller": "cartesian",
-    #     "step_size": 0.05,
-    # }
+    cfg = {
+        "id": "default-cartesian",
+        "home": "iris",
+        "hz": HZ,
+        "mode": "default",
+        "controller": "cartesian",
+        "step_size": 0.05,
+    }
     # cfg = {
     #     "id": "default-move-to-ee",
     #     "home": "iris",
@@ -475,14 +475,14 @@ def follow() -> None:
     #     "controller": "osc",
     #     "step_size": 0.05,
     # }
-    cfg = {
-        "id": "linear-feedback",
-        "home": "iris",
-        "hz": HZ,
-        "mode": "teleoperate",
-        "controller": "cartesian",
-        "step_size": 0.05,
-    }
+    # cfg = {
+    #     "id": "linear-feedback",
+    #     "home": "iris",
+    #     "hz": HZ,
+    #     "mode": "teleoperate",
+    #     "controller": "cartesian",
+    #     "step_size": 0.05,
+    # }
     print(f"[*] Attempting to perform trajectory following with EE impedance controller and `{cfg['id']}` config:")
     for key in cfg:
         print(f"\t`{key}` =>> `{cfg[key]}`")
