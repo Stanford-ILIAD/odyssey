@@ -11,7 +11,7 @@ As we're using Polymetis, you should use the following to launch the robot contr
 import logging
 import os
 import time
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import gym
 import matplotlib.pyplot as plt
@@ -428,16 +428,15 @@ class FrankaEnv(Env):
     def render(self, mode: str = "human") -> None:
         raise NotImplementedError("Render is not implemented for Physical FrankaEnv...")
 
-    def close(self) -> Any:
+    def close(self) -> None:
         # Terminate Policy
-        logs = self.robot.terminate_current_policy()
+        if self.controller in {"joint", "cartesian"}:
+            self.robot.terminate_current_policy()
 
         # Garbage collection & sleep just in case...
         del self.robot
         self.robot = None, None
         time.sleep(1)
-
-        return logs
 
 
 def teleoperate() -> None:
