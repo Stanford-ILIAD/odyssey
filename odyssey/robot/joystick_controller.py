@@ -1,8 +1,12 @@
 # Controller Class 
 from pickle import TRUE
 import pygame
+import time
 
-class JoystickControl(object):
+# DEADBAND less than set amount = rounded to 0
+
+class Joystick(object):
+    # default
     def __init__(self, axis_range=2, axis_scale=3.0):
         # initialize pygame module
         pygame.init()
@@ -22,6 +26,7 @@ class JoystickControl(object):
             for i in range(3, 3 + self.AXIS_RANGE):
                 z = self.gamepad.get_axis(i)
                 if abs(z) < self.DEADBAND:
+                    # centered axis
                     z = 0.0
                 zs.append(z * self.AXIS_SCALE)
 
@@ -51,8 +56,22 @@ class JoystickControl(object):
         #print(x)
         #print(y)
         
-        return zs, a, b, x, y, stop
+        return a, b, x, y, stop
 
 if __name__ == "__main__":
     print("Running!")
-    JoystickControl()
+    controller = Joystick()
+
+    while True:
+        controller.input()
+        # handle the buttons and the Joystick 
+        # if 'a' is pressed
+        # if 'b' is true etc. 
+    
+        time.sleep(1/20)
+
+
+# if user presses stop button end the program
+
+
+# axis zs
