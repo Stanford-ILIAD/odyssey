@@ -23,6 +23,9 @@ class Joystick(object):
 
 # TODO: ignore for now
         # Latent Actions / 2D End-Effector Control
+        # when in resting state
+        print("Axis range: ", self.AXIS_RANGE)
+
         if self.AXIS_RANGE == 2:
             for i in range(3, 3 + self.AXIS_RANGE):
                 z = self.gamepad.get_axis(i)
@@ -33,6 +36,7 @@ class Joystick(object):
 
 # TODO: ignore for now                
 # Secret, Tri-Axial End Effector Control
+            print("Axis range: ", self.AXIS_RANGE)
         else:
             for i in range(self.AXIS_RANGE):
                 z = self.gamepad.get_axis(i)
@@ -61,6 +65,7 @@ if __name__ == "__main__":
     print("Running!")
     controller = Joystick()
     print("Controller: " , controller.input())
+    print("")
     
 # handling the inputs
     # for all buttons, check the state of the button
@@ -73,17 +78,19 @@ if __name__ == "__main__":
             print("x is pressed")
         if (controller.input()[3]) == 1:
             print("y is pressed")
-        else:
-            print("No button pressed")
+        #else:
+        #    print("No button pressed")
 
         # if user presses stop button, end the program
         if (controller.input()[4]) == 1:
             print("User pressed stop")
-            # FIXME: pygame.error video system not initialized
             pygame.quit()
+            exit()
 
         # TODO: comment
         time.sleep(1/20)
 
 
 # TODO: axis zs
+    while True:
+        if 
