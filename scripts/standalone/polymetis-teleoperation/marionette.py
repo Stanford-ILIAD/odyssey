@@ -343,10 +343,14 @@ class FrankaEnv(Env):
             #   > These values are defined in the default launch_robot YAML (`robot_client/franka_hardware.yaml`)
             self.robot.start_joint_impedance(Kq=self.kp, Kqd=self.kpd)
 
-        elif self.controller in {"cartesian", "osc"}:
+        elif self.controller == "cartesian":
             # Note: P/D values of "None" default to... well the "default" values above 😅
             #   > These values are defined in the default launch_robot YAML (`robot_client/franka_hardware.yaml`)
             self.robot.start_cartesian_impedance(Kx=self.kp, Kxd=self.kpd)
+
+        elif self.controller == "osc":
+            # Don't think you actually need to start a new controller here... should use the Polymetis backoff?
+            pass
 
         else:
             raise NotImplementedError(f"Support for controller `{self.controller}` not yet implemented!")
@@ -355,7 +359,7 @@ class FrankaEnv(Env):
         # Set PD Gains -- kp, kpd -- depending on current mode, controller
         if self.controller == "joint" and not self.mode == "default":
             self.kp, self.kpd = KQ_GAINS[self.mode], KQD_GAINS[self.mode]
-        elif self.controller in {"cartesian", "osc"} and not self.mode == "default":
+        elif self.controller == "cartesian" and not self.mode == "default":
             self.kp, self.kpd = KX_GAINS[self.mode], KXD_GAINS[self.mode]
 
         # Call setup with the new controller...
@@ -387,12 +391,14 @@ class FrankaEnv(Env):
                 # Joint Impedance Controller expects 7D Joint Angles
                 q = torch.from_numpy(action)
                 self.robot.update_desired_joint_positions(q)
+
             elif self.controller == "cartesian":
-                # First 3 elements are xyz, last 4 elements are quaternion orientation...
+                # Cartesian controller expects tuple -- first 3 elements are xyz, last 4 are quaternion orientation...
                 pos, ori = torch.from_numpy(action[:3]), torch.from_numpy(action[3:])
                 self.robot.update_desired_ee_pose(position=pos, orientation=ori)
+
             elif self.controller == "osc":
-                # First 3 elements are xyz, last 4 elements are quaternion orientation...
+                # OSC controller expects tuple -- first 3 elements are xyz, last 4 are quaternion orientation...
                 #   =>> Note: `move_to_ee_pose` does not natively accept Tensors!
                 pos, ori = action[:3], action[3:]
                 self.robot.move_to_ee_pose(position=pos, orientation=ori)
@@ -437,13 +443,16 @@ def teleoperate() -> None:
 
 def follow() -> None:
     """Follow a 3D figure-eight trajectory with the current EE controller, plotting expected vs. actual trajectories."""
-    cfg = {"id": "sasha", "home": "iris", "hz": HZ, "mode": "default", "step_size": 0.05}
+
+    # === Define a few plausible configurations ===
+    # cfg = {"id": "sasha", "home": "iris", "hz": HZ, "mode": "default", "controller": "cartesian", "step_size": 0.05}
+    cfg = {"id": "osc", "home": "iris", "hz": HZ, "mode": "default", "controller": "osc", "step_size": 0.05}
     print(f"[*] Attempting to perform trajectory following with EE impedance controller and `{cfg['id']}` config:")
     for key in cfg:
         print(f"\t`{key}` =>> `{cfg[key]}`")
 
     # Initialize environment & get initial poses...
-    env = FrankaEnv(home=cfg["home"], hz=cfg["hz"], mode=cfg["mode"])
+    env = FrankaEnv(home=cfg["home"], hz=cfg["hz"], mode=cfg["mode"], controller=cfg["controller"])
     fixed_position, ee_orientation = env.ee_position, env.ee_orientation
 
     # Helper functions for generating a rotation trajectory to follow (figure-eight)
@@ -453,7 +462,7 @@ def follow() -> None:
         z = (np.cos(t) * np.cos(t)).reshape(-1, 1)
         return np.concatenate([x, y, z], axis=1)
 
-    def figure_eight(t: Union[float, np.ndarray], scale: float = 0.8) -> np.ndarray:
+    def figure_eight(t: Union[float, np.ndarray], scale: float = 0.5) -> np.ndarray:
         # Shift curve orientation to start at current gripper orientation
         curve, origin = generate_figure_eight(t) * scale, generate_figure_eight(0.0) * scale
         return curve - origin + ee_orientation
