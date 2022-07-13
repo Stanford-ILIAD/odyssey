@@ -551,6 +551,8 @@ def follow() -> None:
     ax.plot3D(desired[:, 0], desired[:, 1], desired[:, 2], "black", label="Ground Truth")
     ax.scatter3D(actual[:, 0], actual[:, 1], actual[:, 2], c="red", alpha=0.7, label="Actual")
     plt.savefig(f"plots/{cfg['id']}+m={cfg['mode']}+r={ROTATION_IMPLEMENTATION}.png")
+    ax.legend()
+    ax.set_title("Desired vs. Actual Robot Trajectory", fontdict={"fontsize": 18}, pad=25)
     plt.clf()
 
     # Plot desired (black) vs. DM (blue) vs. Scipy (green)
@@ -559,6 +561,8 @@ def follow() -> None:
     ax.plot3D(desired[:, 0], desired[:, 1], desired[:, 2], "black", label="Ground Truth")
     ax.scatter3D(actual_dm[:, 0], actual_dm[:, 1], actual_dm[:, 2], c="blue", alpha=0.7, label="DM Control")
     ax.scatter3D(actual_scipy[:, 0], actual_scipy[:, 1], actual_scipy[:, 2], c="green", alpha=0.7, label="Scipy")
+    ax.legend()
+    ax.set_title("Euler Angles -> Quat -> Euler Angles for DM Control vs. Scipy", fontdict={"fontsize": 18}, pad=25)
     plt.savefig(f"plots/{cfg['id']}+m={cfg['mode']}+r={ROTATION_IMPLEMENTATION}.png")
     plt.clf()
 
