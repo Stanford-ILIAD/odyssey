@@ -19,6 +19,7 @@ import numpy as np
 import torch
 from gym import Env
 from polymetis import RobotInterface
+from scipy.spatial.transform import Rotation as R
 
 
 # Silence OpenAI Gym warnings
@@ -26,6 +27,9 @@ gym.logger.setLevel(logging.ERROR)
 
 # Whether to run in "teleoperation" or "follow" mode (follow is for benchmarking EE controller)
 RUN_MODE = "follow"
+
+# What `Rotation` implementation to use in < dm | scipy >
+ROTATION_IMPLEMENTATION = "dm"
 
 # fmt: off
 HOMES = {
@@ -47,28 +51,20 @@ HZ, POLE_LIMIT, TOLERANCE = 20, (1.0 - 1e-6), 1e-10
 
 # Joint Controller gains -- we want a compliant robot when recording, and stiff when playing back / teleoperating
 KQ_GAINS = {
-    "record": [1, 1, 1, 1, 1, 1, 1],
-    "rb2": [26.6667, 40.0000, 33.3333, 33.3333, 23.3333, 16.6667, 6.6667],
     "default": [80, 120, 100, 100, 70, 50, 20],
-    "teleoperate": [240.0, 360.0, 300.0, 300.0, 210.0, 150.0, 60.0],
 }
 KQD_GAINS = {
-    "record": [1, 1, 1, 1, 1, 1, 1],
-    "rb2": [3.3333, 3.3333, 3.3333, 3.3333, 1.6667, 1.6667, 1.6667],
     "default": [10, 10, 10, 10, 5, 5, 5],
-    "teleoperate": [30.0, 30.0, 30.0, 30.0, 15.0, 15.0, 15.0],
 }
 
 # End-Effector Controller gains -- we want a compliant robot when recording, and stiff when playing back / operating
 KX_GAINS = {
-    "record": [1, 1, 1, 1, 1, 1],
     "default": [150, 150, 150, 10, 10, 10],
-    "teleoperate": [450, 450, 450, 30, 30, 30],  # Upper bound is ???, so using joint default -- 3x multiplier
+    "teleoperate": [150, 150, 150, 10, 10, 10],
 }
 KXD_GAINS = {
-    "record": [1, 1, 1, 1, 1, 1],
     "default": [25, 25, 25, 7, 7, 7],
-    "teleoperate": [75, 75, 75, 21, 21, 21],  # Upper bound is ???, so using joint default -- 3x multiplier
+    "teleoperate": [0, 0, 0, 0, 0, 0],  # We want straight up linear feedback!
 }
 
 
@@ -94,7 +90,7 @@ class Rate:
         self.last = time.time()
 
 
-# Rotation & Quaternion Helpers
+# === DM Control Rotation & Quaternion Helpers ===
 #   =>> Reference: DM Control -- https://github.com/deepmind/dm_control/blob/main/dm_control/utils/transformations.py
 def quat2rmat(quat: np.ndarray) -> np.ndarray:
     """
@@ -306,7 +302,7 @@ def euler2quat(euler_vec: np.ndarray):
     return mat2quat(rmat)
 
 
-# Polymetis Environment Wrapper...
+# === Polymetis Environment Wrapper ===
 class FrankaEnv(Env):
     def __init__(
         self, home: str, hz: int, mode: str = "default", controller: str = "cartesian", step_size: float = 0.05
@@ -325,6 +321,9 @@ class FrankaEnv(Env):
         self.robot, self.kp, self.kpd = None, None, None
         self.step_size = step_size
 
+        # Debugging...
+        self.current_ee_rot_dm, self.current_ee_rot_scipy = None, None
+
         # Initialize Robot and PD Controller
         self.reset()
 
@@ -338,6 +337,10 @@ class FrankaEnv(Env):
         self.current_ee_pose = np.concatenate([a.numpy() for a in self.robot.get_ee_pose()])
         self.current_ee_rot = quat2euler(self.current_ee_pose[3:])
         self.current_joint_pose = self.robot.get_joint_positions().numpy()
+
+        # Debugging...
+        self.current_ee_rot_dm = quat2euler(self.current_ee_pose[3:])
+        self.current_ee_rot_scipy = R.from_quat(self.current_ee_pose[3:]).as_euler("XYZ")
 
         # Create an *Impedance Controller*, with the desired gains...
         #   > Note: Feel free to add any other controller, e.g., a PD controller around joint poses.
@@ -375,6 +378,10 @@ class FrankaEnv(Env):
         new_ee_pose = np.concatenate([a.numpy() for a in self.robot.get_ee_pose()])
         new_ee_rot = quat2euler(new_ee_pose[3:])
 
+        # Debugging...
+        new_ee_rot_dm = quat2euler(new_ee_pose[3:])
+        new_ee_rot_scipy = R.from_quat(new_ee_pose[3:]).as_euler("XYZ")
+
         # Note that deltas are "shifted" 1 time step to the right from the corresponding "state"
         obs = {
             "q": new_joint_pose,
@@ -386,6 +393,10 @@ class FrankaEnv(Env):
 
         # Bump "current" trackers...
         self.current_joint_pose, self.current_ee_pose, self.current_ee_rot = new_joint_pose, new_ee_pose, new_ee_rot
+
+        # Debugging...
+        self.current_ee_rot_dm, self.current_ee_rot_scipy = new_ee_rot_dm, new_ee_rot_scipy
+
         return obs
 
     def step(self, action: Optional[np.ndarray]) -> Tuple[Dict[str, np.ndarray], int, bool, None]:
@@ -448,13 +459,36 @@ def follow() -> None:
     """Follow a 3D figure-eight trajectory with the current EE controller, plotting expected vs. actual trajectories."""
 
     # === Define a few plausible configurations ===
-    # cfg = {"id": "sasha", "home": "iris", "hz": HZ, "mode": "default", "controller": "cartesian", "step_size": 0.05}
-    cfg = {"id": "osc", "home": "iris", "hz": HZ, "mode": "default", "controller": "osc", "step_size": 0.05}
+    # cfg = {
+    #     "id": "default-cartesian",
+    #     "home": "iris",
+    #     "hz": HZ,
+    #     "mode": "default",
+    #     "controller": "cartesian",
+    #     "step_size": 0.05,
+    # }
+    # cfg = {
+    #     "id": "default-move-to-ee",
+    #     "home": "iris",
+    #     "hz": HZ,
+    #     "mode": "default",
+    #     "controller": "osc",
+    #     "step_size": 0.05,
+    # }
+    cfg = {
+        "id": "linear-feedback",
+        "home": "iris",
+        "hz": HZ,
+        "mode": "teleoperate",
+        "controller": "cartesian",
+        "step_size": 0.05,
+    }
     print(f"[*] Attempting to perform trajectory following with EE impedance controller and `{cfg['id']}` config:")
     for key in cfg:
         print(f"\t`{key}` =>> `{cfg[key]}`")
 
     # Initialize environment & get initial poses...
+    os.makedirs("plots", exist_ok=True)
     env = FrankaEnv(
         home=cfg["home"], hz=cfg["hz"], mode=cfg["mode"], controller=cfg["controller"], step_size=cfg["step_size"]
     )
@@ -474,14 +508,24 @@ def follow() -> None:
 
     # Generate the desired trajectory --> the "gold" path to follow...
     timesteps = np.linspace(0, 2 * np.pi, 50)
-    desired_trajectory = figure_eight(timesteps)
+    desired = figure_eight(timesteps)
 
     # Drop into follow loop --> we're just tracing a figure eight with the orientation (fixed position!)
     curr_t, max_t, actual, deltas = 0, 2 * np.pi, [ee_orientation], [figure_eight(0.0).flatten() - ee_orientation]
+    actual_dm, actual_scipy = [], []
+
     while curr_t < max_t:
         # Move Robot --> transform Euler angle back to quaternion...
         new_angle = figure_eight(curr_t).flatten()
-        new_quat = euler2quat(new_angle)
+
+        if ROTATION_IMPLEMENTATION == "dm":
+            new_quat = euler2quat(new_angle)
+        elif ROTATION_IMPLEMENTATION == "scipy":
+            new_quat = R.from_euler("XYZ", new_angle).as_quat()
+        else:
+            raise NotImplementedError(f"Rotation Implementation `{ROTATION_IMPLEMENTATION}` not found!")
+
+        # Take a step...
         env.step(np.concatenate([fixed_position, new_quat], axis=0))
 
         # Grab updated orientation
@@ -489,34 +533,49 @@ def follow() -> None:
         actual.append(achieved_orientation)
         deltas.append(new_angle - achieved_orientation)
 
+        # Debugging...
+        actual_dm.append(env.current_ee_rot_dm)
+        actual_scipy.append(env.current_ee_rot_scipy)
+
         # Update Time
         print(f"Target: {new_angle} -- Achieved: {achieved_orientation}")
         curr_t += cfg["step_size"]
 
     # Vectorize Trajectory
-    actual_trajectory = np.asarray(actual)
+    actual = np.asarray(actual)
+    actual_dm, actual_scipy = np.asarray(actual_dm), np.asarray(actual_scipy)
 
     # Plot desired (black) vs. actual (red)
     plt.figure(figsize=(10, 10))
     ax = plt.axes(projection="3d")
-    ax.plot3D(desired_trajectory[:, 0], desired_trajectory[:, 1], desired_trajectory[:, 2], "black")
-    ax.scatter3D(actual_trajectory[:, 0], actual_trajectory[:, 1], actual_trajectory[:, 2], c="red", alpha=0.3)
+    ax.plot3D(desired[:, 0], desired[:, 1], desired[:, 2], "black", label="Ground Truth")
+    ax.scatter3D(actual[:, 0], actual[:, 1], actual[:, 2], c="red", alpha=0.7, label="Actual")
+    plt.savefig(f"plots/{cfg['id']}+m={cfg['mode']}+r={ROTATION_IMPLEMENTATION}.png")
+    plt.clf()
 
-    # Save Figure
-    os.makedirs("plots", exist_ok=True)
-    plt.savefig(f"plots/{cfg['id']}+m={cfg['mode']}.png")
+    # Plot desired (black) vs. DM (blue) vs. Scipy (green)
+    plt.figure(figsize=(10, 10))
+    ax = plt.axes(projection="3d")
+    ax.plot3D(desired[:, 0], desired[:, 1], desired[:, 2], "black", label="Ground Truth")
+    ax.scatter3D(actual_dm[:, 0], actual_dm[:, 1], actual_dm[:, 2], c="blue", alpha=0.7, label="DM Control")
+    ax.scatter3D(actual_scipy[:, 0], actual_scipy[:, 1], actual_scipy[:, 2], c="green", alpha=0.7, label="Scipy")
+    plt.savefig(f"plots/{cfg['id']}+m={cfg['mode']}+r={ROTATION_IMPLEMENTATION}.png")
+    plt.clf()
 
     # Cleanup
     env.close()
 
     # Explore...
-    norms = [np.linalg.norm(x) for x in deltas]
+    norms = np.array([np.linalg.norm(x) for x in deltas])
+    print(f"Maximum Euler Angle Difference (L2 Norm) = `{norms.max()}`")
 
-    import IPython
+    # fmt: off
+    if input("Drop into (p)rompt? [Press any other key to exit] =>> ") == "p":
+        import IPython
+        IPython.embed()
 
-    IPython.embed()
-
-    print(norms)
+    print("[*] Exiting...")
+    # fmt: on
 
 
 if __name__ == "__main__":

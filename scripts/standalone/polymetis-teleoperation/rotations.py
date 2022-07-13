@@ -5,13 +5,16 @@ Standalone verification script to evaluate the differences between the default S
 (quat/euler), the TorchControl (Polymetis) Rotation implementation (derived from Scipy), and the separate DM Control
 utility functions.
 """
+import os
 from typing import Union
 
+import matplotlib.pyplot as plt
 import numpy as np
+from scipy.spatial.transform import Rotation as R
 
 
 # CONSTANTS -- EE Orientation is ~ what gets returned when you run FK on the IRIS "home" pose...
-POLE_LIMIT, TOLERANCE = (1.0 - 1e-6), 1e-10
+HZ, POLE_LIMIT, TOLERANCE = 20, (1.0 - 1e-6), 1e-10
 EE_ORIENTATION = np.array([0.02872275, 0.00059619, -0.01118877])
 
 
@@ -235,15 +238,53 @@ def rotations() -> None:
         z = (np.cos(t) * np.cos(t)).reshape(-1, 1)
         return np.concatenate([x, y, z], axis=1)
 
-    def figure_eight(t: Union[float, np.ndarray], scale: float = 0.8) -> np.ndarray:
+    def figure_eight(t: Union[float, np.ndarray], scale: float = 0.5) -> np.ndarray:
         # Shift curve orientation to start at current gripper orientation
         curve, origin = generate_figure_eight(t) * scale, generate_figure_eight(0.0) * scale
         return curve - origin + EE_ORIENTATION
 
     # Generate the desired trajectory --> the "gold" path to follow...
     timesteps = np.linspace(0, 2 * np.pi, 50)
-    desired_trajectory = figure_eight(timesteps)
-    print(desired_trajectory)
+    desired = figure_eight(timesteps)
+
+    # Try to "reconstruct" the figure-eight via different rotation conversions to/from quaternions...
+    curr_t, max_t, dm_actual, scipy_actual = 0, 2 * np.pi, [], []
+    while curr_t < max_t:
+        target_euler_angle = figure_eight(curr_t).flatten()
+        quat_noise = np.random.normal(scale=0.01, size=4)
+
+        # DM Control Functions w/ Backtranslation
+        dm_desired_quat = euler2quat(target_euler_angle) + quat_noise
+        dm_actual_euler = quat2euler(dm_desired_quat)
+
+        # Scipy Rotation w/ Backtranslation
+        scipy_desired_quat = R.from_euler("XYZ", target_euler_angle).as_quat() + quat_noise
+        scipy_actual_euler = R.from_quat(scipy_desired_quat).as_euler("XYZ")
+
+        # Log
+        dm_actual.append(dm_actual_euler)
+        scipy_actual.append(scipy_actual_euler)
+
+        # Update time (assume 20 HZ)
+        curr_t += 1.0 / HZ
+
+    # Vectorize
+    dm_actual, scipy_actual = np.asarray(dm_actual), np.asarray(scipy_actual)
+
+    # Plot target (black) vs. dm_actual (blue) vs. scipy_actual (red)
+    plt.figure(figsize=(10, 10))
+    ax = plt.axes(projection="3d")
+    ax.plot3D(desired[:, 0], desired[:, 1], desired[:, 2], "black", label="Ground Truth")
+    ax.scatter3D(dm_actual[:, 0], dm_actual[:, 1], dm_actual[:, 2], c="blue", marker="o", alpha=0.7, label="DM Control")
+    ax.scatter3D(
+        scipy_actual[:, 0], scipy_actual[:, 1], scipy_actual[:, 2], c="green", marker="^", alpha=0.7, label="Scipy"
+    )
+    ax.legend()
+    ax.set_title("Euler Angles -> Quat -> Euler Angles for DM Control vs. Scipy", fontdict={"fontsize": 18}, pad=25)
+
+    # Save Figure
+    os.makedirs("plots", exist_ok=True)
+    plt.savefig("plots/rotations.png")
 
 
 if __name__ == "__main__":
