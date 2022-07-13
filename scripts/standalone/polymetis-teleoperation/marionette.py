@@ -60,7 +60,7 @@ KQD_GAINS = {
 # End-Effector Controller gains -- we want a compliant robot when recording, and stiff when playing back / operating
 KX_GAINS = {
     "default": [150, 150, 150, 10, 10, 10],
-    "teleoperate": [150, 150, 150, 10, 10, 10],
+    "teleoperate": [x * 10 for x in [150, 150, 150, 10, 10, 10]],
 }
 KXD_GAINS = {
     "default": [25, 25, 25, 7, 7, 7],
@@ -340,7 +340,7 @@ class FrankaEnv(Env):
 
         # Debugging...
         self.current_ee_rot_dm = quat2euler(self.current_ee_pose[3:])
-        self.current_ee_rot_scipy = R.from_quat(self.current_ee_pose[3:]).as_euler("XYZ")
+        self.current_ee_rot_scipy = R.from_quat(self.current_ee_pose[3:]).as_euler("xyz")
 
         # Create an *Impedance Controller*, with the desired gains...
         #   > Note: Feel free to add any other controller, e.g., a PD controller around joint poses.
@@ -380,7 +380,7 @@ class FrankaEnv(Env):
 
         # Debugging...
         new_ee_rot_dm = quat2euler(new_ee_pose[3:])
-        new_ee_rot_scipy = R.from_quat(new_ee_pose[3:]).as_euler("XYZ")
+        new_ee_rot_scipy = R.from_quat(new_ee_pose[3:]).as_euler("xyz")
 
         # Note that deltas are "shifted" 1 time step to the right from the corresponding "state"
         obs = {
@@ -459,14 +459,14 @@ def follow() -> None:
     """Follow a 3D figure-eight trajectory with the current EE controller, plotting expected vs. actual trajectories."""
 
     # === Define a few plausible configurations ===
-    cfg = {
-        "id": "default-cartesian",
-        "home": "iris",
-        "hz": HZ,
-        "mode": "default",
-        "controller": "cartesian",
-        "step_size": 0.05,
-    }
+    # cfg = {
+    #     "id": "default-cartesian",
+    #     "home": "iris",
+    #     "hz": HZ,
+    #     "mode": "default",
+    #     "controller": "cartesian",
+    #     "step_size": 0.05,
+    # }
     # cfg = {
     #     "id": "default-move-to-ee",
     #     "home": "iris",
@@ -475,14 +475,14 @@ def follow() -> None:
     #     "controller": "osc",
     #     "step_size": 0.05,
     # }
-    # cfg = {
-    #     "id": "linear-feedback",
-    #     "home": "iris",
-    #     "hz": HZ,
-    #     "mode": "teleoperate",
-    #     "controller": "cartesian",
-    #     "step_size": 0.05,
-    # }
+    cfg = {
+        "id": "linear-feedback",
+        "home": "iris",
+        "hz": HZ,
+        "mode": "teleoperate",
+        "controller": "cartesian",
+        "step_size": 0.05,
+    }
     print(f"[*] Attempting to perform trajectory following with EE impedance controller and `{cfg['id']}` config:")
     for key in cfg:
         print(f"\t`{key}` =>> `{cfg[key]}`")
@@ -514,32 +514,37 @@ def follow() -> None:
     curr_t, max_t, actual, deltas = 0, 2 * np.pi, [ee_orientation], [figure_eight(0.0).flatten() - ee_orientation]
     actual_dm, actual_scipy = [], []
 
-    while curr_t < max_t:
-        # Move Robot --> transform Euler angle back to quaternion...
-        new_angle = figure_eight(curr_t).flatten()
+    # Wrap in try/except...
+    try:
+        while curr_t < max_t:
+            # Move Robot --> transform Euler angle back to quaternion...
+            new_angle = figure_eight(curr_t).flatten()
 
-        if ROTATION_IMPLEMENTATION == "dm":
-            new_quat = euler2quat(new_angle)
-        elif ROTATION_IMPLEMENTATION == "scipy":
-            new_quat = R.from_euler("XYZ", new_angle).as_quat()
-        else:
-            raise NotImplementedError(f"Rotation Implementation `{ROTATION_IMPLEMENTATION}` not found!")
+            if ROTATION_IMPLEMENTATION == "dm":
+                new_quat = euler2quat(new_angle)
+            elif ROTATION_IMPLEMENTATION == "scipy":
+                new_quat = R.from_euler("xyz", new_angle).as_quat()
+            else:
+                raise NotImplementedError(f"Rotation Implementation `{ROTATION_IMPLEMENTATION}` not found!")
 
-        # Take a step...
-        env.step(np.concatenate([fixed_position, new_quat], axis=0))
+            # Take a step...
+            env.step(np.concatenate([fixed_position, new_quat], axis=0))
 
-        # Grab updated orientation
-        achieved_orientation = env.ee_orientation
-        actual.append(achieved_orientation)
-        deltas.append(new_angle - achieved_orientation)
+            # Grab updated orientation
+            achieved_orientation = env.ee_orientation
+            actual.append(achieved_orientation)
+            deltas.append(new_angle - achieved_orientation)
 
-        # Debugging...
-        actual_dm.append(env.current_ee_rot_dm)
-        actual_scipy.append(env.current_ee_rot_scipy)
+            # Debugging...
+            actual_dm.append(env.current_ee_rot_dm)
+            actual_scipy.append(env.current_ee_rot_scipy)
 
-        # Update Time
-        print(f"Target: {new_angle} -- Achieved: {achieved_orientation}")
-        curr_t += cfg["step_size"]
+            # Update Time
+            print(f"Target: {new_angle} -- Achieved: {achieved_orientation}")
+            curr_t += cfg["step_size"]
+    
+    except KeyboardInterrupt:
+        print("[*] Keyboard Interrupt - Robot in Unsafe State...")
 
     # Vectorize Trajectory
     actual = np.asarray(actual)
@@ -553,6 +558,7 @@ def follow() -> None:
     plt.savefig(f"plots/{cfg['id']}+m={cfg['mode']}+r={ROTATION_IMPLEMENTATION}.png")
     ax.legend()
     ax.set_title("Desired vs. Actual Robot Trajectory", fontdict={"fontsize": 18}, pad=25)
+    plt.savefig(f"plots/trajectory-{cfg['id']}+m={cfg['mode']}+r={ROTATION_IMPLEMENTATION}.png")
     plt.clf()
 
     # Plot desired (black) vs. DM (blue) vs. Scipy (green)
