@@ -10,8 +10,9 @@ from typing import Union
 import numpy as np
 
 
-# CONSTANTS
+# CONSTANTS -- EE Orientation is ~ what gets returned when you run FK on the IRIS "home" pose...
 POLE_LIMIT, TOLERANCE = (1.0 - 1e-6), 1e-10
+EE_ORIENTATION = np.array([0.02872275, 0.00059619, -0.01118877])
 
 
 # DM Control :: Rotation & Quaternion Helpers
@@ -237,8 +238,7 @@ def rotations() -> None:
     def figure_eight(t: Union[float, np.ndarray], scale: float = 0.8) -> np.ndarray:
         # Shift curve orientation to start at current gripper orientation
         curve, origin = generate_figure_eight(t) * scale, generate_figure_eight(0.0) * scale
-        return curve - origin
-        # return curve - origin + ee_orientation
+        return curve - origin + EE_ORIENTATION
 
     # Generate the desired trajectory --> the "gold" path to follow...
     timesteps = np.linspace(0, 2 * np.pi, 50)
