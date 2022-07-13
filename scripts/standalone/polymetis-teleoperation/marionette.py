@@ -308,7 +308,9 @@ def euler2quat(euler_vec: np.ndarray):
 
 # Polymetis Environment Wrapper...
 class FrankaEnv(Env):
-    def __init__(self, home: str, hz: int, mode: str = "default", controller: str = "cartesian") -> None:
+    def __init__(
+        self, home: str, hz: int, mode: str = "default", controller: str = "cartesian", step_size: float = 0.05
+    ) -> None:
         """
         Initialize a *physical* Franka Environment, with the given home pose, PD controller gains, and camera.
 
@@ -316,10 +318,12 @@ class FrankaEnv(Env):
         :param hz: Default policy control Hz; somewhere between 20-60 is a good range.
         :param mode: Mode in < "record" | "default" | "teleoperate"> -- mostly used to set gains!
         :param controller: Which impedance controller to use in < joint | cartesian | osc > (teleoperate uses osc!)
+        :param step_size: Step size to use for `time_to_go` calculations...
         """
         self.home, self.rate, self.mode, self.controller, self.curr_step = home, Rate(hz), mode, controller, 0
         self.current_joint_pose, self.current_ee_pose, self.current_ee_rot = None, None, None
         self.robot, self.kp, self.kpd = None, None, None
+        self.step_size = step_size
 
         # Initialize Robot and PD Controller
         self.reset()
@@ -401,7 +405,7 @@ class FrankaEnv(Env):
                 # OSC controller expects tuple -- first 3 elements are xyz, last 4 are quaternion orientation...
                 #   =>> Note: `move_to_ee_pose` does not natively accept Tensors!
                 pos, ori = action[:3], action[3:]
-                self.robot.move_to_ee_pose(position=pos, orientation=ori)
+                self.robot.move_to_ee_pose(position=pos, orientation=ori, time_to_go=self.step_size)
             else:
                 raise NotImplementedError(f"Controller mode `{self.controller}` not supported!")
 
@@ -452,7 +456,9 @@ def follow() -> None:
         print(f"\t`{key}` =>> `{cfg[key]}`")
 
     # Initialize environment & get initial poses...
-    env = FrankaEnv(home=cfg["home"], hz=cfg["hz"], mode=cfg["mode"], controller=cfg["controller"])
+    env = FrankaEnv(
+        home=cfg["home"], hz=cfg["hz"], mode=cfg["mode"], controller=cfg["controller"], step_size=cfg["step_size"]
+    )
     fixed_position, ee_orientation = env.ee_position, env.ee_orientation
 
     # Helper functions for generating a rotation trajectory to follow (figure-eight)
