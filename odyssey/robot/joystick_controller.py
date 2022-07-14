@@ -21,68 +21,86 @@ class Joystick(object):
         pygame.event.get()
         zs = []
 
-# TODO: ignore for now
+# TODO
         # Latent Actions / 2D End-Effector Control
         # when in resting state
-        print("Axis range: ", self.AXIS_RANGE)
 
+        # right stick?
         if self.AXIS_RANGE == 2:
+            # range 3-5
             for i in range(3, 3 + self.AXIS_RANGE):
                 z = self.gamepad.get_axis(i)
                 if abs(z) < self.DEADBAND:
                     # centered axis
                     z = 0.0
+                print("z right: ", z)
                 zs.append(z * self.AXIS_SCALE)
+                #print("zs right: ", zs)
+                #print("zs right: {.2f}, {.2f}".format(zs[0]))
 
-# TODO: ignore for now                
+# TODO                
 # Secret, Tri-Axial End Effector Control
-            print("Axis range: ", self.AXIS_RANGE)
+        # left stick?
         else:
+            ## print("Range 2: ", range(self.AXIS_RANGE))
             for i in range(self.AXIS_RANGE):
                 z = self.gamepad.get_axis(i)
                 if abs(z) < self.DEADBAND:
                     z = 0.0
+                print("z left: ", z)
+                # set the current position of the left axis?
                 zs.append(z * self.AXIS_SCALE)
+                #print("zs left: ", zs)
 
         # Button Press
         # gets the current state of buttons a, b, x, y, stop
         a, b = self.gamepad.get_button(0), self.gamepad.get_button(1)
         x, y, stop = self.gamepad.get_button(2), self.gamepad.get_button(3), self.gamepad.get_button(7)
-
-        # Testing with Prints
-        #if a == True:
-        #    print("Button 0 value is true")
-        #elif a == False:
-        #    print("Button 0 value is false")
         
-        #print(b)
-        #print(x)
-        #print(y)
-        
-        return a, b, x, y, stop
+        return zs, a, b, x, y, stop
 
 if __name__ == "__main__":
     print("Running!")
     controller = Joystick()
     print("Controller: " , controller.input())
-    print("")
+    print("zs: ", controller.input()[0])
     
-# handling the inputs
+    # handling the inputs
     # for all buttons, check the state of the button
     while True:
-        if (controller.input()[0]) == 1:
-            print("A is pressed")
         if (controller.input()[1]) == 1:
-            print("B is pressed")
+            print("A is pressed")
         if (controller.input()[2]) == 1:
-            print("x is pressed")
+            print("B is pressed")
         if (controller.input()[3]) == 1:
+            print("x is pressed")
+        if (controller.input()[4]) == 1:
             print("y is pressed")
         #else:
         #    print("No button pressed")
 
+
+        # zs axes: 
+        # negative zs values = left
+        # positive zs values = right
+        # right joystick
+        print(controller.input()[0][0]) 
+        if (controller.input()[0][0]) > 0:
+            print("right joystick: moving right")
+        elif (controller.input()[0][0]) < 0:
+            print("right joystick: moving left")
+        
+        # left joystick
+        print(controller.input()[0][1]) 
+        if(controller.input()[0][1]) > 0:
+            print("left joystick: moving right")
+        elif (controller.input()[0][1]) < 0:
+            print("right joystick: moving left")
+
+
+
         # if user presses stop button, end the program
-        if (controller.input()[4]) == 1:
+        if (controller.input()[5]) == 1:
             print("User pressed stop")
             pygame.quit()
             exit()
@@ -92,5 +110,5 @@ if __name__ == "__main__":
 
 
 # TODO: axis zs
-    while True:
-        if 
+    #while True:
+     #   if ():
