@@ -26,6 +26,16 @@ class Joystick(object):
         # when in resting state
 
         # right stick?
+
+        # x = zs[0]
+        # left - 
+        # right +
+
+        # y = zs[1]
+        # forward +
+        # backward -
+        print("zs: ", zs)
+
         if self.AXIS_RANGE == 2:
             # range 3-5
             for i in range(3, 3 + self.AXIS_RANGE):
@@ -41,6 +51,11 @@ class Joystick(object):
 # TODO                
 # Secret, Tri-Axial End Effector Control
         # left stick?
+        # zs[4]
+        # up + 
+        # down - 
+
+
         else:
             ## print("Range 2: ", range(self.AXIS_RANGE))
             for i in range(self.AXIS_RANGE):
@@ -63,8 +78,13 @@ if __name__ == "__main__":
     print("Running!")
     controller = Joystick()
     print("Controller: " , controller.input())
-    print("zs: ", controller.input()[0])
-    
+    print("zs0: ", controller.input()[0])
+    print("zs1: ", controller.input()[1])
+    print("zs2: ", controller.input()[2])
+    print("zs3: ", controller.input()[3])
+    print("zs4: ", controller.input()[4])
+
+
     # handling the inputs
     # for all buttons, check the state of the button
     while True:
@@ -84,17 +104,29 @@ if __name__ == "__main__":
         # negative zs values = left
         # positive zs values = right
         # right joystick
+
+        #print("zs: ", controller.input())
+        # left/right
         print(controller.input()[0][0]) 
         if (controller.input()[0][0]) > 0:
             print("right joystick: moving right")
         elif (controller.input()[0][0]) < 0:
             print("right joystick: moving left")
-        
-        # left joystick
-        print(controller.input()[0][1]) 
-        if(controller.input()[0][1]) > 0:
-            print("left joystick: moving right")
+
+        # forward/backward
+        print(controller.input()[0][1])
+        if (controller.input()[0][1]) > 0:
+            print("right joystick: moving forward")
         elif (controller.input()[0][1]) < 0:
+            print("right joystick: moving backward")
+
+        # left joystick
+        # up/down
+
+        print(controller.input()[1]) 
+        if(controller.input()[1]) > 0:
+            print("left joystick: moving right")
+        elif (controller.input()[1]) < 0:
             print("right joystick: moving left")
 
 
