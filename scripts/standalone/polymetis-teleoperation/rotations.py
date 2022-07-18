@@ -251,15 +251,14 @@ def rotations() -> None:
     curr_t, max_t, dm_actual, scipy_actual = 0, 2 * np.pi, [], []
     while curr_t < max_t:
         target_euler_angle = figure_eight(curr_t).flatten()
-        quat_noise = np.random.normal(scale=0.01, size=4)
 
         # DM Control Functions w/ Backtranslation
-        dm_desired_quat = euler2quat(target_euler_angle) + quat_noise
+        dm_desired_quat = euler2quat(target_euler_angle)
         dm_actual_euler = quat2euler(dm_desired_quat)
 
         # Scipy Rotation w/ Backtranslation
-        scipy_desired_quat = R.from_euler("XYZ", target_euler_angle).as_quat() + quat_noise
-        scipy_actual_euler = R.from_quat(scipy_desired_quat).as_euler("XYZ")
+        scipy_desired_quat = R.from_euler("xyz", target_euler_angle).as_quat()
+        scipy_actual_euler = R.from_quat(scipy_desired_quat).as_euler("xyz")
 
         # Log
         dm_actual.append(dm_actual_euler)
