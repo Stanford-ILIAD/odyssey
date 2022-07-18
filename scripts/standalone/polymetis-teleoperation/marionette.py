@@ -124,8 +124,6 @@ class ResolvedRateControl(toco.PolicyModule):
         :param state_dict: A dictionary containing robot states (joint positions, velocities, etc.)
         :return Dictionary containing joint torques.
         """
-        print("Desired EE Velocity", self.ee_velocity_desired)
-
         # State Extraction
         joint_pos_current, joint_vel_current = state_dict["joint_positions"], state_dict["joint_velocities"]
         if not self.is_initialized:
@@ -145,7 +143,6 @@ class ResolvedRateControl(toco.PolicyModule):
         torque_feedforward = self.invdyn(joint_pos_current, joint_vel_current, torch.zeros_like(joint_pos_current))
         torque_out = torque_feedback + torque_feedforward
 
-        print("Output Torques", torque_out)
         return {"joint_torques": torque_out}
 
 
@@ -421,7 +418,10 @@ def follow() -> None:
             if cfg["controller"] in {"cartesian", "osc"}:
                 env.step(np.concatenate([fixed_position, new_quat], axis=0))
             elif cfg["controller"] in {"resolved-rate"}:
-                env.step(np.concatenate([np.zeros(3), (new_angle - achieved_orientation)[::-1]]))
+                env.step(np.concatenate([np.zeros(3), new_angle - achieved_orientation]))
+                import IPython
+
+                IPython.embed()
 
             # Grab updated orientation
             achieved_orientation = env.ee_orientation
