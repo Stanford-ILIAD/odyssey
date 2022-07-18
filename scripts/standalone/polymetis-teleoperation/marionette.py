@@ -50,11 +50,11 @@ HOMES = {
 # Joint Controller gains -- we want a compliant robot when recording, and stiff when playing back / teleoperating
 #   =>> Polymetis Defaults (Libfranka Defaults are too high?)
 KQ_GAINS = {
-    "default": [80, 120, 100, 100, 70, 50, 20],
-    "teleoperate": [80, 120, 100, 100, 70, 50, 20],
+    "default": [600, 600, 600, 600, 250, 150, 50],
+    "teleoperate": [600, 600, 600, 600, 250, 150, 50],
 }
 KQD_GAINS = {
-    "default": [10, 10, 10, 10, 5, 5, 5],
+    "default": [50, 50, 50, 50, 30, 25, 15],
     "teleoperate": [0, 0, 0, 0, 0, 0, 0],   # We want straight up linear feedback!
 }
 
@@ -408,7 +408,7 @@ def follow() -> None:
             if cfg["controller"] in {"cartesian", "osc"}:
                 env.step(np.concatenate([fixed_position, new_quat], axis=0))
             elif cfg["controller"] in {"resolved-rate"}:
-                env.step(np.concatenate([fixed_position, new_angle - achieved_orientation]))
+                env.step(np.concatenate([np.zeros(3), new_angle - achieved_orientation]))
 
             # Grab updated orientation
             achieved_orientation = env.ee_orientation
