@@ -109,6 +109,7 @@ class ResolvedRateControl(toco.PolicyModule):
         self.robot_model = robot_model
         self.invdyn = toco.modules.feedforward.InverseDynamics(self.robot_model, ignore_gravity=ignore_gravity)
         self.hz, self.dt, self.is_initialized = hz, 1.0 / hz, False
+        print("DT", self.dt)
 
         # Create JointPD Controller...
         self.pd = toco.modules.feedback.JointSpacePD(Kp, Kd)
@@ -415,9 +416,6 @@ def follow() -> None:
             if cfg["controller"] in {"cartesian", "osc"}:
                 env.step(np.concatenate([fixed_position, new_quat], axis=0))
             elif cfg["controller"] in {"resolved-rate"}:
-                import IPython
-
-                IPython.embed()
                 env.step(np.concatenate([np.zeros(3), new_angle - achieved_orientation]))
 
             # Grab updated orientation
