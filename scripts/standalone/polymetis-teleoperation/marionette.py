@@ -123,6 +123,8 @@ class ResolvedRateControl(toco.PolicyModule):
         :param state_dict: A dictionary containing robot states (joint positions, velocities, etc.)
         :return Dictionary containing joint torques.
         """
+        print("Desired EE Velocity", self.ee_velocity_desired)
+
         # State Extraction
         joint_pos_current, joint_vel_current = state_dict["joint_positions"], state_dict["joint_velocities"]
 
@@ -423,6 +425,7 @@ def follow() -> None:
 
             # Update Time
             print(f"Target: {new_angle} -- Achieved: {achieved_orientation}")
+            print(f"\tDelta: {deltas[-1]}")
             curr_t += cfg["step_size"]
 
     except KeyboardInterrupt:
