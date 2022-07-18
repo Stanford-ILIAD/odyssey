@@ -208,7 +208,7 @@ class FrankaEnv(Env):
         self.home, self.rate, self.mode, self.controller, self.curr_step = home, Rate(hz), mode, controller, 0
         self.current_joint_pose, self.current_ee_pose, self.current_ee_rot = None, None, None
         self.robot, self.kp, self.kpd = None, None, None
-        self.step_size = step_size
+        self.hz, self.step_size = hz, step_size
 
         # Initialize Robot and PD Controller
         self.reset()
@@ -241,12 +241,17 @@ class FrankaEnv(Env):
             # Don't think you actually need to start a new controller here... should use the Polymetis backoff?
             pass
 
+        elif self.controller == "resolved-rate":
+            # Note: P/D values of "None" default to... well the "default" values for Joint PD Control above 😅
+            #   > These values are defined in the default launch_robot YAML (`robot_client/franka_hardware.yaml`)
+            self.robot.start_resolved_rate_control(hz=self.hz, Kq=self.kp, Kqd=self.kpd)
+
         else:
             raise NotImplementedError(f"Support for controller `{self.controller}` not yet implemented!")
 
     def reset(self) -> Dict[str, np.ndarray]:
         # Set PD Gains -- kp, kpd -- depending on current mode, controller
-        if self.controller == "joint" and not self.mode == "default":
+        if self.controller in {"joint", "resolved-rate"} and not self.mode == "default":
             self.kp, self.kpd = KQ_GAINS[self.mode], KQD_GAINS[self.mode]
         elif self.controller == "cartesian" and not self.mode == "default":
             self.kp, self.kpd = KX_GAINS[self.mode], KXD_GAINS[self.mode]
@@ -291,6 +296,11 @@ class FrankaEnv(Env):
                 #   =>> Note: `move_to_ee_pose` does not natively accept Tensors!
                 pos, ori = action[:3], action[3:]
                 self.robot.move_to_ee_pose(position=pos, orientation=ori, time_to_go=self.step_size)
+
+            elif self.controller == "resolved-rate":
+                # Resolved rate controller expects 6D end-effector velocities (deltas) in X/Y/Z/Roll/Pitch/Yaw...
+                ee_velocities = torch.from_numpy(action)
+                self.robot.update_desired_ee_velocities(ee_velocities)
 
             else:
                 raise NotImplementedError(f"Controller mode `{self.controller}` not supported!")
@@ -342,15 +352,23 @@ def follow() -> None:
     #     "mode": "default",
     #     "step_size": 0.05,
     # }
+    # cfg = {
+    #     "id": "cartesian-linear-feedback",
+    #     "home": "iris",
+    #     "hz": HZ,
+    #     "controller": "cartesian",
+    #     "mode": "teleoperate",
+    #     "step_size": 0.05,
+    # }
     cfg = {
-        "id": "cartesian-linear-feedback",
+        "id": "default-resolved-rate",
         "home": "iris",
         "hz": HZ,
-        "mode": "teleoperate",
-        "controller": "cartesian",
+        "controller": "resolved-rate",
+        "mode": "default",
         "step_size": 0.05,
     }
-    print(f"[*] Attempting to perform trajectory following with EE impedance controller and `{cfg['id']}` config:")
+    print(f"[*] Attempting trajectory following with controller `{cfg['controller']}` and `{cfg['id']}` config:")
     for key in cfg:
         print(f"\t`{key}` =>> `{cfg[key]}`")
 
@@ -377,7 +395,8 @@ def follow() -> None:
     desired = figure_eight(timesteps)
 
     # Drop into follow loop --> we're just tracing a figure eight with the orientation (fixed position!)
-    curr_t, max_t, actual, deltas = 0, 2 * np.pi, [ee_orientation], [figure_eight(0.0).flatten() - ee_orientation]
+    curr_t, max_t, actual = cfg["step_size"], 2 * np.pi, [ee_orientation]
+    achieved_orientation, deltas = env.ee_orientation, [figure_eight(0.0).flatten() - ee_orientation]
 
     # Wrap in try/except...
     try:
@@ -387,7 +406,10 @@ def follow() -> None:
             new_quat = R.from_euler("xyz", new_angle).as_quat()
 
             # Take a step...
-            env.step(np.concatenate([fixed_position, new_quat], axis=0))
+            if cfg["controller"] in {"cartesian", "osc"}:
+                env.step(np.concatenate([fixed_position, new_quat], axis=0))
+            elif cfg["controller"] in {"resolved-rate"}:
+                env.step(np.concatenate([fixed_position, new_angle - achieved_orientation]))
 
             # Grab updated orientation
             achieved_orientation = env.ee_orientation
