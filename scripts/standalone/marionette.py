@@ -24,56 +24,34 @@ from polymetis import RobotInterface
 from scipy.spatial.transform import Rotation as R
 
 
+# Suppress PyGame Import Text
+os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
+import pygame  # noqa: E402
+
+
 # Get Logger
 log = logging.getLogger(__name__)
 
 # Silence OpenAI Gym warnings
 gym.logger.setLevel(logging.ERROR)
 
-# Whether to run in "teleoperation" or "follow" mode (follow is for benchmarking EE controller)
-RUN_MODE = "follow"
-
 # Control Frequency
 HZ = 20
 
 # fmt: off
-HOMES = {
-    "default": [0.0, -np.pi / 4.0, 0.0, -3.0 * np.pi / 4.0, 0.0, np.pi / 2.0, np.pi / 4.0],
-
-    # >> Home Position for ILIAD (same as default)
-    "iliad": [0.0, -np.pi / 4.0, 0.0, -3.0 * np.pi / 4.0, 0.0, np.pi / 2.0, np.pi / 4.0],
-
-    # >> Home Position from @Sasha's Code (IRIS)
-    "iris": [0.0, 0.0, 0.0, -np.pi / 2.0, 0.0, np.pi / 2.0, 0.0],
-}
+HOMES = {"default": [0.0, -np.pi / 4.0, 0.0, -3.0 * np.pi / 4.0, 0.0, np.pi / 2.0, np.pi / 4.0]}
 
 # Joint Impedance Controller gains...
 #   =>> Libfranka Defaults (https://frankaemika.github.io/libfranka/joint_impedance_control_8cpp-example.html)
-KQ_GAINS = {
-    "default": [600, 600, 600, 600, 250, 150, 50],
-    "teleoperate": [600, 600, 600, 600, 250, 150, 50],
-}
-KQD_GAINS = {
-    "default": [50, 50, 50, 50, 30, 25, 15],
-    "teleoperate": [0, 0, 0, 0, 0, 0, 0],   # We want straight up linear feedback!
-}
+KQ_GAINS, KQD_GAINS = {"default": [600, 600, 600, 600, 250, 150, 50]}, {"default": [50, 50, 50, 50, 30, 25, 15]}
 
 # End-Effector Impedance Controller gains...
-#   =>> Libfranka Defaults (https://frankaemika.github.io/libfranka/cartesian_impedance_control_8cpp-example.html)
-KX_GAINS = {
-    "default": [150, 150, 150, 10, 10, 10],
-    "teleoperate": [150, 150, 150, 10, 10, 10],
-}
-#   =>> Libfranka Defaults = int(2 * sqrt(KP))
-KXD_GAINS = {
-    "default": [25, 25, 25, 7, 7, 7],
-    "teleoperate": [0, 0, 0, 0, 0, 0],  # We want straight up linear feedback!
-}
+#   =>> P :: Libfranka Defaults (https://frankaemika.github.io/libfranka/cartesian_impedance_control_8cpp-example.html)
+#   =>> D :: Libfranka Defaults = int(2 * sqrt(KP))
+KX_GAINS, KXD_GAINS = {"default": [150, 150, 150, 10, 10, 10]}, {"default": [25, 25, 25, 7, 7, 7]}
 
-# Resolved Rate Controller gains =>> this is for the resolved-rate *velocity* control :: same as "D" gains from PD...
-KR_GAINS = {
-    "default": [50, 50, 50, 50, 30, 25, 15]
-}
+# Resolved Rate Controller Gains =>> should be uniform...
+KRR_GAINS = {"default": [50, 50, 50, 50, 50, 50, 50]}
 # fmt: on
 
 
@@ -150,15 +128,16 @@ class OdysseyRobotInterface(RobotInterface):
         *scalar-first* format (w, x, y, z). However, `scipy` and other libraries expect *scalar-last* (x, y, z, w);
         we take care of that here!
 
-        Returns: Tuple of (3D position, 4D orientation as a quaternion w/ scalar-last)
+        :return Tuple of (3D position, 4D orientation as a quaternion w/ scalar-last)
         """
         pos, quat = super().get_ee_pose()
         return pos, torch.roll(quat, -1)
 
     def start_resolved_rate_control(self, Kq: Optional[List[float]] = None) -> List[Any]:
         """
-        Start Resolved-Rate Control (P control on Joint Velocity), as a non-blocking controller; the desired EE
-        velocities can be updated using `update_desired_ee_velocities` (6-DoF).
+        Start Resolved-Rate Control (P control on Joint Velocity), as a non-blocking controller.
+
+        The desired EE velocities can be updated using `update_desired_ee_velocities` (6-DoF)!
         """
         torch_policy = ResolvedRateControl(
             Kp=self.Kqd_default if Kq is None else Kq,
@@ -169,8 +148,9 @@ class OdysseyRobotInterface(RobotInterface):
 
     def update_desired_ee_velocities(self, ee_velocities: torch.Tensor):
         """
-        Update the desired end-effector velocities (6-DoF x, y, z, roll, pitch, yaw). Requires starting a resolved-rate
-        controller via `start_resolved_rate_control` beforehand.
+        Update the desired end-effector velocities (6-DoF x, y, z, roll, pitch, yaw).
+
+        Requires starting a resolved-rate controller via `start_resolved_rate_control` beforehand.
         """
         try:
             update_idx = self.update_current_policy({"ee_velocity_desired": ee_velocities})
@@ -194,7 +174,7 @@ class FrankaEnv(Env):
         :param home: Default home position (specified as a string index into `HOMES` above!
         :param hz: Default policy control hz; somewhere between 20-40 is a good range.
         :param controller: Which impedance controller to use in < joint | cartesian | osc >
-        :param mode: Mode in < "record" | "default" | "teleoperate"> -- mostly used to set gains!
+        :param mode: Mode in < "default" | ... > -- mostly used to set gains!
         :param step_size: Step size to use for `time_to_go` calculations...
         """
         self.home, self.rate, self.mode, self.controller, self.curr_step = home, Rate(hz), mode, controller, 0
@@ -229,10 +209,6 @@ class FrankaEnv(Env):
             #   > These values are defined in the default launch_robot YAML (`robot_client/franka_hardware.yaml`)
             self.robot.start_cartesian_impedance(Kx=self.kp, Kxd=self.kpd)
 
-        elif self.controller == "osc":
-            # Don't think you actually need to start a new controller here... should use the Polymetis backoff?
-            pass
-
         elif self.controller == "resolved-rate":
             # Note: P/D values of "None" default to... well the "default" values for Joint PD Control above 😅
             #   > These values are defined in the default launch_robot YAML (`robot_client/franka_hardware.yaml`)
@@ -248,7 +224,7 @@ class FrankaEnv(Env):
         elif self.controller == "cartesian" and not self.mode == "default":
             self.kp, self.kpd = KX_GAINS[self.mode], KXD_GAINS[self.mode]
         elif self.controller == "resolved-rate":
-            self.kp = KR_GAINS[self.mode]
+            self.kp = KRR_GAINS[self.mode]
 
         # Call setup with the new controller...
         self.robot_setup(self.home)
@@ -284,12 +260,6 @@ class FrankaEnv(Env):
                 # Cartesian controller expects tuple -- first 3 elements are xyz, last 4 are quaternion orientation...
                 pos, ori = torch.from_numpy(action[:3]), torch.from_numpy(action[3:])
                 self.robot.update_desired_ee_pose(position=pos, orientation=ori)
-
-            elif self.controller == "osc":
-                # OSC controller expects tuple -- first 3 elements are xyz, last 4 are quaternion orientation...
-                #   =>> Note: `move_to_ee_pose` does not natively accept Tensors!
-                pos, ori = action[:3], action[3:]
-                self.robot.move_to_ee_pose(position=pos, orientation=ori, time_to_go=self.step_size)
 
             elif self.controller == "resolved-rate":
                 # Resolved rate controller expects 6D end-effector velocities (deltas) in X/Y/Z/Roll/Pitch/Yaw...
@@ -329,9 +299,69 @@ class FrankaEnv(Env):
         time.sleep(1)
 
 
-def teleoperate() -> None:
+# === Logitech Gamepad/Joystick Controller ===
+class JoystickControl(object):
+    def __init__(self, axis_scale=1.0):
+        pygame.init()
+        self.gamepad = pygame.joystick.Joystick(0)
+        self.gamepad.init()
+        self.deadband, self.axis_scale = 0.1, axis_scale
+
+    def input(self):
+        pygame.event.get()
+        zs = []
+
+        # Get 5 axis (0-1 = right joystick, 2 = triggers, 3-4 = left joystick)
+        for i in range(5):
+            z = self.gamepad.get_axis(i)
+            if abs(z) < self.deadband:
+                z = 0.0
+            zs.append(z * self.axis_scale)
+
+        # Button Press
+        a, b = self.gamepad.get_button(0), self.gamepad.get_button(1)
+        x, y, stop = self.gamepad.get_button(2), self.gamepad.get_button(3), self.gamepad.get_button(7)
+        return zs, a, b, x, y, stop
+
+
+def marionette() -> None:
     """Run 6-DoF Teleoperation w/ a Joystick --> 2 modes, 3 Joystick axes :: (x, y, z) || (roll, pitch, yaw)."""
-    raise NotImplementedError("Not implemented until trajectory following works...")
+    cfg = {
+        "id": "default-resolved-rate",
+        "home": "default",
+        "hz": HZ,
+        "controller": "resolved-rate",
+        "mode": "default",
+        "step_size": 0.05,
+    }
+    print(f"[*] Attempting teleoperation with motion controller `{cfg['controller']}` and `{cfg['id']}` config:")
+    for key in cfg:
+        print(f"\t`{key}` =>> `{cfg[key]}`")
+
+    # Initialize Joystick...
+    print("[*] Connecting to Joystick...")
+    joystick = JoystickControl()
+
+    # Initialize environment & get initial poses...
+    print("[*] Initializing robot connection...")
+    env = FrankaEnv(
+        home=cfg["home"], hz=cfg["hz"], controller=cfg["controller"], mode=cfg["mode"], step_size=cfg["step_size"]
+    )
+
+    print("[*] Dropping into Teleoperation Loop...")
+    try:
+        while True:
+            # Measure Joystick Input
+            zs, _, _, _, _, stop = joystick.input()
+            for idx, z in enumerate(zs):
+                print(f"{idx}: {z}")
+
+    except KeyboardInterrupt:
+        # Just don't crash the program on Ctrl-C or Socket Error (Controller Death)
+        print("\n[*] Terminating...")
+
+    finally:
+        env.close()
 
 
 def follow() -> None:
@@ -458,9 +488,4 @@ def follow() -> None:
 
 
 if __name__ == "__main__":
-    if RUN_MODE == "teleoperate":
-        teleoperate()
-    elif RUN_MODE == "follow":
-        follow()
-    else:
-        print(f"Run mode `{RUN_MODE}` not implemented -- try one of < teleoperate | follow >")
+    marionette()
