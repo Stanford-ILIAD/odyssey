@@ -126,8 +126,7 @@ class ResolvedRateControl(toco.PolicyModule):
         """
         # State Extraction
         joint_pos_current, joint_vel_current = state_dict["joint_positions"], state_dict["joint_velocities"]
-        if not self.is_initialized:
-            self.joint_pos_desired, self.is_initialized = torch.clone(joint_pos_current), True
+        self.joint_pos_desired = torch.clone(joint_pos_current)
 
         # Compute Target Joint Velocity via Resolved Rate Control...
         #   =>> Resolved Rate: joint_vel_desired = J.pinv() @ ee_vel_desired
@@ -359,22 +358,22 @@ def follow() -> None:
     #     "mode": "teleoperate",
     #     "step_size": 0.05,
     # }
-    # cfg = {
-    #     "id": "default-resolved-rate",
-    #     "home": "iris",
-    #     "hz": HZ,
-    #     "controller": "resolved-rate",
-    #     "mode": "default",
-    #     "step_size": 0.05,
-    # }
     cfg = {
-        "id": "resolved-rate-linear-feedback",
+        "id": "default-resolved-rate",
         "home": "iris",
         "hz": HZ,
         "controller": "resolved-rate",
-        "mode": "teleoperate",
+        "mode": "default",
         "step_size": 0.05,
     }
+    # cfg = {
+    #     "id": "resolved-rate-linear-feedback",
+    #     "home": "iris",
+    #     "hz": HZ,
+    #     "controller": "resolved-rate",
+    #     "mode": "teleoperate",
+    #     "step_size": 0.05,
+    # }
     print(f"[*] Attempting trajectory following with controller `{cfg['controller']}` and `{cfg['id']}` config:")
     for key in cfg:
         print(f"\t`{key}` =>> `{cfg[key]}`")
@@ -416,6 +415,9 @@ def follow() -> None:
             if cfg["controller"] in {"cartesian", "osc"}:
                 env.step(np.concatenate([fixed_position, new_quat], axis=0))
             elif cfg["controller"] in {"resolved-rate"}:
+                import IPython
+
+                IPython.embed()
                 env.step(np.concatenate([np.zeros(3), new_angle - achieved_orientation]))
 
             # Grab updated orientation
