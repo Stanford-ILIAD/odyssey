@@ -421,7 +421,7 @@ def follow() -> None:
             if cfg["controller"] in {"cartesian", "osc"}:
                 env.step(np.concatenate([fixed_position, new_quat], axis=0))
             elif cfg["controller"] in {"resolved-rate"}:
-                env.step(np.concatenate([np.zeros(3), new_angle - achieved_orientation]))
+                env.step(np.concatenate([np.zeros(3), (new_angle - achieved_orientation)[::-1]]))
 
             # Grab updated orientation
             achieved_orientation = env.ee_orientation
