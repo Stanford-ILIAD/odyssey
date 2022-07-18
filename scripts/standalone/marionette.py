@@ -11,11 +11,10 @@ As we're using Polymetis, you should use the following to launch the robot contr
 import logging
 import os
 import time
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 import grpc
 import gym
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torchcontrol as toco
@@ -355,6 +354,8 @@ def marionette() -> None:
             zs, _, _, _, _, stop = joystick.input()
             for idx, z in enumerate(zs):
                 print(f"{idx}: {z}")
+            print()
+            time.sleep(0.5)
 
     except KeyboardInterrupt:
         # Just don't crash the program on Ctrl-C or Socket Error (Controller Death)
@@ -362,129 +363,6 @@ def marionette() -> None:
 
     finally:
         env.close()
-
-
-def follow() -> None:
-    """Follow a 3D figure-eight trajectory with the current EE controller, plotting expected vs. actual trajectories."""
-
-    # === Define a few plausible configurations ===
-    # cfg = {
-    #     "id": "default-cartesian-impedance",
-    #     "home": "iris",
-    #     "hz": HZ,
-    #     "controller": "cartesian",
-    #     "mode": "default",
-    #     "step_size": 0.05,
-    # }
-    # cfg = {
-    #     "id": "cartesian-linear-feedback",
-    #     "home": "iris",
-    #     "hz": HZ,
-    #     "controller": "cartesian",
-    #     "mode": "teleoperate",
-    #     "step_size": 0.05,
-    # }
-    cfg = {
-        "id": "default-resolved-rate",
-        "home": "iris",
-        "hz": HZ,
-        "controller": "resolved-rate",
-        "mode": "default",
-        "step_size": 0.05,
-    }
-    # cfg = {
-    #     "id": "resolved-rate-linear-feedback",
-    #     "home": "iris",
-    #     "hz": HZ,
-    #     "controller": "resolved-rate",
-    #     "mode": "teleoperate",
-    #     "step_size": 0.05,
-    # }
-    print(f"[*] Attempting trajectory following with controller `{cfg['controller']}` and `{cfg['id']}` config:")
-    for key in cfg:
-        print(f"\t`{key}` =>> `{cfg[key]}`")
-
-    # Initialize environment & get initial poses...
-    env = FrankaEnv(
-        home=cfg["home"], hz=cfg["hz"], controller=cfg["controller"], mode=cfg["mode"], step_size=cfg["step_size"]
-    )
-    fixed_position, ee_orientation = env.ee_position, env.ee_orientation
-
-    # Helper functions for generating a rotation trajectory to follow (figure-eight)
-    def generate_figure_eight(t: Union[float, np.ndarray]) -> np.ndarray:
-        x = (np.sin(t) * np.cos(t)).reshape(-1, 1)
-        y = np.sin(t).reshape(-1, 1)
-        z = (np.cos(t) * np.cos(t)).reshape(-1, 1)
-        return np.concatenate([x, y, z], axis=1)
-
-    def figure_eight(t: Union[float, np.ndarray], scale: float = 0.5) -> np.ndarray:
-        # Shift curve orientation to start at current gripper orientation
-        curve, origin = generate_figure_eight(t) * scale, generate_figure_eight(0.0) * scale
-        return curve - origin + ee_orientation
-
-    # Generate the desired trajectory --> the "gold" path to follow...
-    timesteps = np.linspace(0, 2 * np.pi, 50)
-    desired = figure_eight(timesteps)
-
-    # Drop into follow loop --> we're just tracing a figure eight with the orientation (fixed position!)
-    curr_t, max_t, actual = cfg["step_size"], 2 * np.pi, [ee_orientation]
-    achieved_orientation, deltas = env.ee_orientation, [figure_eight(0.0).flatten() - ee_orientation]
-    new_angle = figure_eight(curr_t).flatten()
-
-    # Wrap in try/except...
-    try:
-        while curr_t < max_t and np.linalg.norm(new_angle - achieved_orientation) > 0.001:
-            # Move Robot --> transform Euler angle back to quaternion...
-            # new_angle = figure_eight(curr_t).flatten()
-            new_quat = R.from_euler("xyz", new_angle).as_quat()
-
-            # Take a step...
-            if cfg["controller"] in {"cartesian", "osc"}:
-                env.step(np.concatenate([fixed_position, new_quat], axis=0))
-            elif cfg["controller"] in {"resolved-rate"}:
-                env.step(np.array([0.1, 0, 0, 0, 0, 0]))
-                # env.step(np.concatenate([np.zeros(3), new_angle - achieved_orientation]))
-
-            # Grab updated orientation
-            achieved_orientation = env.ee_orientation
-            actual.append(achieved_orientation)
-            deltas.append(new_angle - achieved_orientation)
-
-            # Update Time
-            print(f"Target: {new_angle} -- Achieved: {achieved_orientation}")
-            print(f"\tDelta: {deltas[-1]}")
-            curr_t += cfg["step_size"]
-
-    except KeyboardInterrupt:
-        print("[*] Keyboard Interrupt - Robot in Unsafe State...")
-
-    # Vectorize Trajectory
-    actual = np.asarray(actual)
-
-    # Plot desired (black) vs. actual (red)
-    os.makedirs("plots/marionette", exist_ok=True)
-    plt.figure(figsize=(10, 10))
-    ax = plt.axes(projection="3d")
-    ax.plot3D(desired[:, 0], desired[:, 1], desired[:, 2], "black", label="Ground Truth")
-    ax.scatter3D(actual[:, 0], actual[:, 1], actual[:, 2], c="red", alpha=0.7, label="Actual")
-    ax.legend()
-    ax.set_title("Desired vs. Actual Robot Trajectory", fontdict={"fontsize": 18}, pad=25)
-    plt.savefig(f"plots/marionette/{cfg['id']}+c={cfg['controller']}+m={cfg['mode']}.png")
-    plt.clf()
-
-    # Cleanup
-    env.close()
-
-    # Explore...
-    norms = np.array([np.linalg.norm(x) for x in deltas])
-    print(f"Maximum Euler Angle Difference (L2 Norm) = `{norms.max()}`")
-
-    # fmt: off
-    if input("Drop into (p)rompt? [Press any other key to exit] =>> ") == "p":
-        import IPython
-        IPython.embed()
-    print("[*] Exiting...")
-    # fmt: on
 
 
 if __name__ == "__main__":
