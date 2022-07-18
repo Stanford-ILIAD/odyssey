@@ -123,7 +123,7 @@ class ResolvedRateControl(toco.PolicyModule):
         :param state_dict: A dictionary containing robot states (joint positions, velocities, etc.)
         :return Dictionary containing joint torques.
         """
-        print("Desired EE Velocity", self.ee_velocity_desired.numpy().tolist())
+        print("Desired EE Velocity", self.ee_velocity_desired)
 
         # State Extraction
         joint_pos_current, joint_vel_current = state_dict["joint_positions"], state_dict["joint_velocities"]
@@ -142,7 +142,7 @@ class ResolvedRateControl(toco.PolicyModule):
         torque_feedforward = self.invdyn(joint_pos_current, joint_vel_current, torch.zeros_like(joint_pos_current))
         torque_out = torque_feedback + torque_feedforward
 
-        print("Output Torques", torque_out.numpy().tolist())
+        print("Output Torques", torque_out)
         return {"joint_torques": torque_out}
 
 
