@@ -109,7 +109,6 @@ class ResolvedRateControl(toco.PolicyModule):
         self.robot_model = robot_model
         self.invdyn = toco.modules.feedforward.InverseDynamics(self.robot_model, ignore_gravity=ignore_gravity)
         self.hz, self.dt, self.is_initialized = hz, 1.0 / hz, False
-        print("DT", self.dt)
 
         # Create JointPD Controller...
         self.pd = toco.modules.feedback.JointSpacePD(Kp, Kd)
@@ -136,7 +135,7 @@ class ResolvedRateControl(toco.PolicyModule):
         joint_vel_desired = torch.linalg.lstsq(jacobian, self.ee_velocity_desired).solution
 
         # Compute new "desired" joint pose for PD control...
-        self.joint_pos_desired += torch.mul(joint_vel_desired, self.dt)
+        self.joint_pos_desired += torch.mul(joint_vel_desired, max(1.0, self.dt))
 
         # Control Logic --> Compute PD Torque (feedback) & Inverse Dynamics Torque (feedforward)
         torque_feedback = self.pd(joint_pos_current, joint_vel_current, self.joint_pos_desired, joint_vel_desired)
