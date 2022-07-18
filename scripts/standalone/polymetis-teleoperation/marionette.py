@@ -441,10 +441,9 @@ def follow() -> None:
     ax = plt.axes(projection="3d")
     ax.plot3D(desired[:, 0], desired[:, 1], desired[:, 2], "black", label="Ground Truth")
     ax.scatter3D(actual[:, 0], actual[:, 1], actual[:, 2], c="red", alpha=0.7, label="Actual")
-    plt.savefig(f"plots/marionette/{cfg['id']}+m={cfg['mode']}.png")
     ax.legend()
     ax.set_title("Desired vs. Actual Robot Trajectory", fontdict={"fontsize": 18}, pad=25)
-    plt.savefig(f"plots/trajectory-{cfg['id']}+c={cfg['controller']}+m={cfg['mode']}.png")
+    plt.savefig(f"plots/marionette/{cfg['id']}+c={cfg['controller']}+m={cfg['mode']}.png")
     plt.clf()
 
     # Cleanup
