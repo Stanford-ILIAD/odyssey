@@ -300,6 +300,7 @@ class FrankaEnv(Env):
             elif self.controller == "resolved-rate":
                 # Resolved rate controller expects 6D end-effector velocities (deltas) in X/Y/Z/Roll/Pitch/Yaw...
                 ee_velocities = torch.from_numpy(action)
+                print("EE Velocity", ee_velocities)
                 self.robot.update_desired_ee_velocities(ee_velocities)
 
             else:
@@ -418,7 +419,7 @@ def follow() -> None:
             if cfg["controller"] in {"cartesian", "osc"}:
                 env.step(np.concatenate([fixed_position, new_quat], axis=0))
             elif cfg["controller"] in {"resolved-rate"}:
-                env.step(np.array([0, 0, 0, 1, 0, 0]))
+                env.step(np.array([0, 0, 0, 1.0, 0, 0]))
                 # env.step(np.concatenate([np.zeros(3), new_angle - achieved_orientation]))
 
             # Grab updated orientation
