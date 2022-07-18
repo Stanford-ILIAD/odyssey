@@ -47,7 +47,7 @@ HOMES = {
     "iris": [0.0, 0.0, 0.0, -np.pi / 2.0, 0.0, np.pi / 2.0, 0.0],
 }
 
-# Joint Controller gains -- we want a compliant robot when recording, and stiff when playing back / teleoperating
+# Joint Impedance Controller gains...
 #   =>> Libfranka Defaults (https://frankaemika.github.io/libfranka/joint_impedance_control_8cpp-example.html)
 KQ_GAINS = {
     "default": [600, 600, 600, 600, 250, 150, 50],
@@ -58,7 +58,7 @@ KQD_GAINS = {
     "teleoperate": [0, 0, 0, 0, 0, 0, 0],   # We want straight up linear feedback!
 }
 
-# End-Effector Controller gains -- we want a compliant robot when recording, and stiff when playing back / operating
+# End-Effector Impedance Controller gains...
 #   =>> Libfranka Defaults (https://frankaemika.github.io/libfranka/cartesian_impedance_control_8cpp-example.html)
 KX_GAINS = {
     "default": [150, 150, 150, 10, 10, 10],
@@ -68,6 +68,11 @@ KX_GAINS = {
 KXD_GAINS = {
     "default": [25, 25, 25, 7, 7, 7],
     "teleoperate": [0, 0, 0, 0, 0, 0],  # We want straight up linear feedback!
+}
+
+# Resolved Rate Controller gains =>> this is for the resolved-rate *velocity* control :: same as "D" gains from PD...
+KR_GAINS = {
+    "default": [50, 50, 50, 50, 30, 25, 15]
 }
 # fmt: on
 
@@ -93,14 +98,12 @@ class Rate:
 class ResolvedRateControl(toco.PolicyModule):
     """Resolved Rates Control --> End-Effector Control (dx, dy, dz, droll, dpitch, dyaw) via Joint Velocity Control"""
 
-    def __init__(self, Kp, Kd, robot_model: torch.nn.Module, hz: int, ignore_gravity: bool = True) -> None:
+    def __init__(self, Kp: torch.Tensor, robot_model: torch.nn.Module, ignore_gravity: bool = True) -> None:
         """
-        Initializes a Resolved Rates controller with the given PD gains and robot model.
+        Initializes a Resolved Rates controller with the given P gains and robot model.
 
         :param Kp: P gains in joint space (7-DoF)
-        :param Kd: D gains in joint space (7-DoF)
         :param robot_model: A robot model from torchcontrol.models
-        :param hz: Frequency of the calls to forward()
         :param ignore_gravity: `True` if the robot is already gravity compensated, `False` otherwise
         """
         super().__init__()
@@ -108,14 +111,12 @@ class ResolvedRateControl(toco.PolicyModule):
         # Initialize Modules --> Inverse Dynamics is necessary as it needs to be compensated for in output torques...
         self.robot_model = robot_model
         self.invdyn = toco.modules.feedforward.InverseDynamics(self.robot_model, ignore_gravity=ignore_gravity)
-        self.hz, self.dt, self.is_initialized = hz, 1.0 / hz, False
 
-        # Create JointPD Controller...
-        self.pd = toco.modules.feedback.JointSpacePD(Kp, Kd)
+        # Create LinearFeedback (P) Controller...
+        self.p = toco.modules.feedback.LinearFeedback(Kp)
 
         # Reference End-Effector Velocity (dx, dy, dz, droll, dpitch, dyaw)
         self.ee_velocity_desired = torch.nn.Parameter(torch.zeros(6))
-        self.joint_pos_desired = torch.zeros(7)
 
     def forward(self, state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """
@@ -126,8 +127,6 @@ class ResolvedRateControl(toco.PolicyModule):
         """
         # State Extraction
         joint_pos_current, joint_vel_current = state_dict["joint_positions"], state_dict["joint_velocities"]
-        if not self.is_initialized:
-            self.joint_pos_desired, self.is_initialized = torch.clone(joint_pos_current), True
 
         # Compute Target Joint Velocity via Resolved Rate Control...
         #   =>> Resolved Rate: joint_vel_desired = J.pinv() @ ee_vel_desired
@@ -135,11 +134,8 @@ class ResolvedRateControl(toco.PolicyModule):
         jacobian = self.robot_model.compute_jacobian(joint_pos_current)
         joint_vel_desired = torch.linalg.lstsq(jacobian, self.ee_velocity_desired).solution
 
-        # Compute new "desired" joint pose for PD control...
-        self.joint_pos_desired = joint_pos_current + (joint_vel_desired * self.dt)
-
-        # Control Logic --> Compute PD Torque (feedback) & Inverse Dynamics Torque (feedforward)
-        torque_feedback = self.pd(joint_pos_current, joint_vel_current, self.joint_pos_desired, joint_vel_desired)
+        # Control Logic --> Compute P Torque (feedback) & Inverse Dynamics Torque (feedforward)
+        torque_feedback = self.p(joint_vel_current, joint_vel_desired)
         torque_feedforward = self.invdyn(joint_pos_current, joint_vel_current, torch.zeros_like(joint_pos_current))
         torque_out = torque_feedback + torque_feedforward
 
@@ -159,18 +155,14 @@ class OdysseyRobotInterface(RobotInterface):
         pos, quat = super().get_ee_pose()
         return pos, torch.roll(quat, -1)
 
-    def start_resolved_rate_control(
-        self, hz: Optional[int] = None, Kq: Optional[List[float]] = None, Kqd: Optional[List[float]] = None
-    ) -> List[Any]:
+    def start_resolved_rate_control(self, Kq: Optional[List[float]] = None) -> List[Any]:
         """
-        Start Resolved-Rate Control (via Joint Velocity PD Control), as a non-blocking controller; the desired EE
+        Start Resolved-Rate Control (P control on Joint Velocity), as a non-blocking controller; the desired EE
         velocities can be updated using `update_desired_ee_velocities` (6-DoF).
         """
         torch_policy = ResolvedRateControl(
-            Kp=self.Kq_default if Kq is None else Kq,
-            Kd=self.Kqd_default if Kqd is None else Kqd,
+            Kp=self.Kqd_default if Kq is None else Kq,
             robot_model=self.robot_model,
-            hz=self.metadata.hz if hz is None else hz,
             ignore_gravity=self.use_grav_comp,
         )
         return self.send_torch_policy(torch_policy=torch_policy, blocking=False)
@@ -244,17 +236,19 @@ class FrankaEnv(Env):
         elif self.controller == "resolved-rate":
             # Note: P/D values of "None" default to... well the "default" values for Joint PD Control above 😅
             #   > These values are defined in the default launch_robot YAML (`robot_client/franka_hardware.yaml`)
-            self.robot.start_resolved_rate_control(Kq=self.kp, Kqd=self.kpd)
+            self.robot.start_resolved_rate_control(Kq=self.kp)
 
         else:
             raise NotImplementedError(f"Support for controller `{self.controller}` not yet implemented!")
 
     def reset(self) -> Dict[str, np.ndarray]:
         # Set PD Gains -- kp, kpd -- depending on current mode, controller
-        if self.controller in {"joint", "resolved-rate"} and not self.mode == "default":
+        if self.controller == "joint" and not self.mode == "default":
             self.kp, self.kpd = KQ_GAINS[self.mode], KQD_GAINS[self.mode]
         elif self.controller == "cartesian" and not self.mode == "default":
             self.kp, self.kpd = KX_GAINS[self.mode], KXD_GAINS[self.mode]
+        elif self.controller == "resolved-rate":
+            self.kp = KR_GAINS[self.mode]
 
         # Call setup with the new controller...
         self.robot_setup(self.home)
@@ -300,7 +294,6 @@ class FrankaEnv(Env):
             elif self.controller == "resolved-rate":
                 # Resolved rate controller expects 6D end-effector velocities (deltas) in X/Y/Z/Roll/Pitch/Yaw...
                 ee_velocities = torch.from_numpy(action)
-                print("EE Velocity", ee_velocities)
                 self.robot.update_desired_ee_velocities(ee_velocities)
 
             else:
@@ -361,22 +354,22 @@ def follow() -> None:
     #     "mode": "teleoperate",
     #     "step_size": 0.05,
     # }
-    # cfg = {
-    #     "id": "default-resolved-rate",
-    #     "home": "iris",
-    #     "hz": HZ,
-    #     "controller": "resolved-rate",
-    #     "mode": "default",
-    #     "step_size": 0.05,
-    # }
     cfg = {
-        "id": "resolved-rate-linear-feedback",
+        "id": "default-resolved-rate",
         "home": "iris",
         "hz": HZ,
         "controller": "resolved-rate",
-        "mode": "teleoperate",
+        "mode": "default",
         "step_size": 0.05,
     }
+    # cfg = {
+    #     "id": "resolved-rate-linear-feedback",
+    #     "home": "iris",
+    #     "hz": HZ,
+    #     "controller": "resolved-rate",
+    #     "mode": "teleoperate",
+    #     "step_size": 0.05,
+    # }
     print(f"[*] Attempting trajectory following with controller `{cfg['controller']}` and `{cfg['id']}` config:")
     for key in cfg:
         print(f"\t`{key}` =>> `{cfg[key]}`")
