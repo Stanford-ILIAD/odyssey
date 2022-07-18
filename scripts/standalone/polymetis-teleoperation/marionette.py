@@ -136,7 +136,7 @@ class ResolvedRateControl(toco.PolicyModule):
         joint_vel_desired = torch.linalg.lstsq(jacobian, self.ee_velocity_desired).solution
 
         # Compute new "desired" joint pose for PD control...
-        self.joint_pos_desired = joint_pos_current + (joint_vel_desired * self.dt)
+        self.joint_pos_desired = joint_pos_current + joint_vel_desired
 
         # Control Logic --> Compute PD Torque (feedback) & Inverse Dynamics Torque (feedforward)
         torque_feedback = self.pd(joint_pos_current, joint_vel_current, self.joint_pos_desired, joint_vel_desired)
