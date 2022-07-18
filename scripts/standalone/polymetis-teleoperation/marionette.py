@@ -326,7 +326,7 @@ class FrankaEnv(Env):
 
     def close(self) -> None:
         # Terminate Policy
-        if self.controller in {"joint", "cartesian"}:
+        if self.controller in {"joint", "cartesian", "resolved-rate"}:
             self.robot.terminate_current_policy()
 
         # Garbage collection & sleep just in case...
@@ -424,6 +424,10 @@ def follow() -> None:
             achieved_orientation = env.ee_orientation
             actual.append(achieved_orientation)
             deltas.append(new_angle - achieved_orientation)
+
+            import IPython
+
+            IPython.embed()
 
             # Update Time
             print(f"Target: {new_angle} -- Achieved: {achieved_orientation}")
