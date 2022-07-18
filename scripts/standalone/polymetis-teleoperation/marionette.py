@@ -132,7 +132,8 @@ class ResolvedRateControl(toco.PolicyModule):
         #   =>> Resolved Rate: joint_vel_desired = J.pinv() @ ee_vel_desired
         #                      >> Numerically stable --> torch.linalg.lstsq(J, ee_vel_desired).solution
         jacobian = self.robot_model.compute_jacobian(joint_pos_current)
-        joint_vel_desired = torch.linalg.lstsq(jacobian, self.ee_velocity_desired).solution
+        joint_vel_desired = torch.linalg.pinv(jacobian) @ self.ee_velocity_desired
+        # joint_vel_desired = torch.linalg.lstsq(jacobian, self.ee_velocity_desired).solution
 
         # Compute new "desired" joint pose for PD control...
         self.joint_pos_desired += torch.mul(joint_vel_desired, max(1.0, self.dt))
