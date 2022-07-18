@@ -115,6 +115,7 @@ class ResolvedRateControl(toco.PolicyModule):
 
         # Reference End-Effector Velocity (dx, dy, dz, droll, dpitch, dyaw)
         self.ee_velocity_desired = torch.nn.Parameter(torch.zeros(6))
+        self.joint_pos_desired = torch.zeros(7)
 
     def forward(self, state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """
@@ -127,6 +128,8 @@ class ResolvedRateControl(toco.PolicyModule):
 
         # State Extraction
         joint_pos_current, joint_vel_current = state_dict["joint_positions"], state_dict["joint_velocities"]
+        if not self.is_initialized:
+            self.joint_pos_desired, self.is_initialized = torch.clone(joint_pos_current), True
 
         # Compute Target Joint Velocity via Resolved Rate Control...
         #   =>> Resolved Rate: joint_vel_desired = J.pinv() @ ee_vel_desired
@@ -135,10 +138,10 @@ class ResolvedRateControl(toco.PolicyModule):
         joint_vel_desired = torch.linalg.lstsq(jacobian, self.ee_velocity_desired).solution
 
         # Compute new "desired" joint pose for PD control...
-        joint_pos_desired = joint_pos_current + torch.mul(joint_vel_desired, 1)
+        self.joint_pos_desired = joint_pos_current + joint_vel_desired
 
         # Control Logic --> Compute PD Torque (feedback) & Inverse Dynamics Torque (feedforward)
-        torque_feedback = self.pd(joint_pos_current, joint_vel_current, joint_pos_desired, joint_vel_desired)
+        torque_feedback = self.pd(joint_pos_current, joint_vel_current, self.joint_pos_desired, joint_vel_desired)
         torque_feedforward = self.invdyn(joint_pos_current, joint_vel_current, torch.zeros_like(joint_pos_current))
         torque_out = torque_feedback + torque_feedforward
 
