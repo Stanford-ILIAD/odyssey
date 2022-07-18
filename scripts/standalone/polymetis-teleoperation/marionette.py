@@ -359,12 +359,20 @@ def follow() -> None:
     #     "mode": "teleoperate",
     #     "step_size": 0.05,
     # }
+    # cfg = {
+    #     "id": "default-resolved-rate",
+    #     "home": "iris",
+    #     "hz": HZ,
+    #     "controller": "resolved-rate",
+    #     "mode": "default",
+    #     "step_size": 0.05,
+    # }
     cfg = {
-        "id": "default-resolved-rate",
+        "id": "resolved-rate-linear-feedback",
         "home": "iris",
         "hz": HZ,
         "controller": "resolved-rate",
-        "mode": "default",
+        "mode": "teleoperate",
         "step_size": 0.05,
     }
     print(f"[*] Attempting trajectory following with controller `{cfg['controller']}` and `{cfg['id']}` config:")
