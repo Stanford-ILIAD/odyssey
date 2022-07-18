@@ -207,7 +207,7 @@ class FrankaEnv(Env):
         self.home, self.rate, self.mode, self.controller, self.curr_step = home, Rate(hz), mode, controller, 0
         self.current_joint_pose, self.current_ee_pose, self.current_ee_rot = None, None, None
         self.robot, self.kp, self.kpd = None, None, None
-        self.hz, self.step_size = hz, step_size
+        self.step_size = step_size
 
         # Initialize Robot and PD Controller
         self.reset()
@@ -243,7 +243,7 @@ class FrankaEnv(Env):
         elif self.controller == "resolved-rate":
             # Note: P/D values of "None" default to... well the "default" values for Joint PD Control above 😅
             #   > These values are defined in the default launch_robot YAML (`robot_client/franka_hardware.yaml`)
-            self.robot.start_resolved_rate_control(hz=self.hz, Kq=self.kp, Kqd=self.kpd)
+            self.robot.start_resolved_rate_control(Kq=self.kp, Kqd=self.kpd)
 
         else:
             raise NotImplementedError(f"Support for controller `{self.controller}` not yet implemented!")
