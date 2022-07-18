@@ -428,10 +428,6 @@ def follow() -> None:
             actual.append(achieved_orientation)
             deltas.append(new_angle - achieved_orientation)
 
-            import IPython
-
-            IPython.embed()
-
             # Update Time
             print(f"Target: {new_angle} -- Achieved: {achieved_orientation}")
             print(f"\tDelta: {deltas[-1]}")
