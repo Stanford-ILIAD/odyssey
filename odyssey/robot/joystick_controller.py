@@ -34,20 +34,22 @@ class Joystick(object):
         # y = zs[1]
         # forward +
         # backward -
-        print("zs: ", zs)
 
         if self.AXIS_RANGE == 2:
             # range 3-5
             for i in range(3, 3 + self.AXIS_RANGE):
+                # print("i: ", i)
                 z = self.gamepad.get_axis(i)
                 if abs(z) < self.DEADBAND:
                     # centered axis
                     z = 0.0
-                print("z right: ", z)
+                # print("z right: ", z)
                 zs.append(z * self.AXIS_SCALE)
                 #print("zs right: ", zs)
                 #print("zs right: {.2f}, {.2f}".format(zs[0]))
-
+                print("zs: ", zs)
+        
+        
 # TODO                
 # Secret, Tri-Axial End Effector Control
         # left stick?
