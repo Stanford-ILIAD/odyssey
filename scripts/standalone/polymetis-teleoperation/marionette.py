@@ -419,6 +419,7 @@ def follow() -> None:
             if cfg["controller"] in {"cartesian", "osc"}:
                 env.step(np.concatenate([fixed_position, new_quat], axis=0))
             elif cfg["controller"] in {"resolved-rate"}:
+                print("Tryna roll...")
                 env.step(np.array([0, 0, 0, 1.0, 0, 0]))
                 # env.step(np.concatenate([np.zeros(3), new_angle - achieved_orientation]))
 
