@@ -115,7 +115,6 @@ class ResolvedRateControl(toco.PolicyModule):
 
         # Reference End-Effector Velocity (dx, dy, dz, droll, dpitch, dyaw)
         self.ee_velocity_desired = torch.nn.Parameter(torch.zeros(6))
-        self.joint_pos_desired = torch.zeros(7)
 
     def forward(self, state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """
@@ -126,20 +125,18 @@ class ResolvedRateControl(toco.PolicyModule):
         """
         # State Extraction
         joint_pos_current, joint_vel_current = state_dict["joint_positions"], state_dict["joint_velocities"]
-        self.joint_pos_desired = torch.clone(joint_pos_current)
 
         # Compute Target Joint Velocity via Resolved Rate Control...
         #   =>> Resolved Rate: joint_vel_desired = J.pinv() @ ee_vel_desired
         #                      >> Numerically stable --> torch.linalg.lstsq(J, ee_vel_desired).solution
         jacobian = self.robot_model.compute_jacobian(joint_pos_current)
-        joint_vel_desired = torch.linalg.pinv(jacobian) @ self.ee_velocity_desired
-        # joint_vel_desired = torch.linalg.lstsq(jacobian, self.ee_velocity_desired).solution
+        joint_vel_desired = torch.linalg.lstsq(jacobian, self.ee_velocity_desired).solution
 
         # Compute new "desired" joint pose for PD control...
-        self.joint_pos_desired += torch.mul(joint_vel_desired, max(1.0, self.dt))
+        joint_pos_desired = joint_pos_current + torch.mul(joint_vel_desired, self.dt)
 
         # Control Logic --> Compute PD Torque (feedback) & Inverse Dynamics Torque (feedforward)
-        torque_feedback = self.pd(joint_pos_current, joint_vel_current, self.joint_pos_desired, joint_vel_desired)
+        torque_feedback = self.pd(joint_pos_current, joint_vel_current, joint_pos_desired, joint_vel_desired)
         torque_feedforward = self.invdyn(joint_pos_current, joint_vel_current, torch.zeros_like(joint_pos_current))
         torque_out = torque_feedback + torque_feedforward
         return {"joint_torques": torque_out}
@@ -404,12 +401,13 @@ def follow() -> None:
     # Drop into follow loop --> we're just tracing a figure eight with the orientation (fixed position!)
     curr_t, max_t, actual = cfg["step_size"], 2 * np.pi, [ee_orientation]
     achieved_orientation, deltas = env.ee_orientation, [figure_eight(0.0).flatten() - ee_orientation]
+    new_angle = figure_eight(curr_t).flatten()
 
     # Wrap in try/except...
     try:
-        while curr_t < max_t:
+        while curr_t < max_t and np.linalg.norm(new_angle - achieved_orientation) > 0.001:
             # Move Robot --> transform Euler angle back to quaternion...
-            new_angle = figure_eight(curr_t).flatten()
+            # new_angle = figure_eight(curr_t).flatten()
             new_quat = R.from_euler("xyz", new_angle).as_quat()
 
             # Take a step...
