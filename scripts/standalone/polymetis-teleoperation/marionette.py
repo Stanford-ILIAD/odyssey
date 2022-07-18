@@ -361,22 +361,22 @@ def follow() -> None:
     #     "mode": "teleoperate",
     #     "step_size": 0.05,
     # }
-    cfg = {
-        "id": "default-resolved-rate",
-        "home": "iris",
-        "hz": HZ,
-        "controller": "resolved-rate",
-        "mode": "default",
-        "step_size": 0.05,
-    }
     # cfg = {
-    #     "id": "resolved-rate-linear-feedback",
+    #     "id": "default-resolved-rate",
     #     "home": "iris",
     #     "hz": HZ,
     #     "controller": "resolved-rate",
-    #     "mode": "teleoperate",
+    #     "mode": "default",
     #     "step_size": 0.05,
     # }
+    cfg = {
+        "id": "resolved-rate-linear-feedback",
+        "home": "iris",
+        "hz": HZ,
+        "controller": "resolved-rate",
+        "mode": "teleoperate",
+        "step_size": 0.05,
+    }
     print(f"[*] Attempting trajectory following with controller `{cfg['controller']}` and `{cfg['id']}` config:")
     for key in cfg:
         print(f"\t`{key}` =>> `{cfg[key]}`")
@@ -419,8 +419,7 @@ def follow() -> None:
             if cfg["controller"] in {"cartesian", "osc"}:
                 env.step(np.concatenate([fixed_position, new_quat], axis=0))
             elif cfg["controller"] in {"resolved-rate"}:
-                print("Tryna roll...")
-                env.step(np.array([0, 0, 0, 1.0, 0, 0]))
+                env.step(np.array([0.1, 0, 0, 0, 0, 0]))
                 # env.step(np.concatenate([np.zeros(3), new_angle - achieved_orientation]))
 
             # Grab updated orientation
