@@ -48,7 +48,7 @@ HOMES = {
 }
 
 # Joint Controller gains -- we want a compliant robot when recording, and stiff when playing back / teleoperating
-#   =>> Polymetis Defaults (Libfranka Defaults are too high?)
+#   =>> Libfranka Defaults (https://frankaemika.github.io/libfranka/joint_impedance_control_8cpp-example.html)
 KQ_GAINS = {
     "default": [600, 600, 600, 600, 250, 150, 50],
     "teleoperate": [600, 600, 600, 600, 250, 150, 50],
