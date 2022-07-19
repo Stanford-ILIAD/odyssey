@@ -357,6 +357,11 @@ def marionette() -> None:
             print()
             time.sleep(0.5)
 
+            # AXES
+            # 1 -- (left joystick -- up is negative, down is positive)
+            # 3 -- (right joystick -- right is positive, left is negative)
+            # 4 -- (right joystick -- up is negative, down is positive)
+
     except KeyboardInterrupt:
         # Just don't crash the program on Ctrl-C or Socket Error (Controller Death)
         print("\n[*] Terminating...")
