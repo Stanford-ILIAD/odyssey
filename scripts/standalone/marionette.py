@@ -49,8 +49,8 @@ KQ_GAINS, KQD_GAINS = {"default": [600, 600, 600, 600, 250, 150, 50]}, {"default
 #   =>> D :: Libfranka Defaults = int(2 * sqrt(KP))
 KX_GAINS, KXD_GAINS = {"default": [150, 150, 150, 10, 10, 10]}, {"default": [25, 25, 25, 7, 7, 7]}
 
-# Resolved Rate Controller Gains =>> should be uniform...
-KRR_GAINS = {"default": [30, 30, 30, 30, 30, 30, 10]}
+# Resolved Rate Controller Gains =>> should get lower as you get to the end-effector...
+KRR_GAINS = {"default": [50, 50, 50, 50, 30, 25, 15]}
 # fmt: on
 
 
