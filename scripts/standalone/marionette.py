@@ -50,7 +50,7 @@ KQ_GAINS, KQD_GAINS = {"default": [600, 600, 600, 600, 250, 150, 50]}, {"default
 KX_GAINS, KXD_GAINS = {"default": [150, 150, 150, 10, 10, 10]}, {"default": [25, 25, 25, 7, 7, 7]}
 
 # Resolved Rate Controller Gains =>> should be uniform...
-KRR_GAINS = {"default": [20, 20, 20, 20, 20, 20, 20]}
+KRR_GAINS = {"default": [30, 30, 30, 30, 30, 30, 30]}
 # fmt: on
 
 
@@ -301,11 +301,11 @@ class FrankaEnv(Env):
 
 # === Logitech Gamepad/Joystick Controller ===
 class JoystickControl:
-    def __init__(self, action_scale: float = 0.25) -> None:
+    def __init__(self, scale: Tuple[float, ...] = (0.25, 0.25, 0.25, 0.5, 0.5, 0.5)) -> None:
         pygame.init()
         self.gamepad = pygame.joystick.Joystick(0)
         self.gamepad.init()
-        self.deadband, self.action_scale = 0.1, action_scale
+        self.deadband, self.scale = 0.1, scale
 
     def input(self) -> Tuple[np.ndarray, bool, bool, bool, bool, bool]:
         pygame.event.get()
@@ -321,20 +321,20 @@ class JoystickControl:
 
         # Directly compute end-effector velocities from joystick inputs -- switch on right-trigger
         mode = "linear" if self.gamepad.get_axis(5) < 0 else "angular"
-        endeff_velocities = np.zeros(6)
+        ee_dot = np.zeros(6)
 
         # Iterate through three axes (x/roll, y/pitch, z/yaw) --> in that order (flipping signs for the latter two axes)
         if mode == "linear":
             x, y, z = self.gamepad.get_axis(3), -self.gamepad.get_axis(4), -self.gamepad.get_axis(1)
-            endeff_velocities[:3] = [vel * self.action_scale if abs(vel) >= self.deadband else 0 for vel in [x, y, z]]
+            ee_dot[:3] = [vel * self.scale[i] if abs(vel) >= self.deadband else 0 for i, vel in enumerate([x, y, z])]
         else:
             r, p, y = self.gamepad.get_axis(3), -self.gamepad.get_axis(4), -self.gamepad.get_axis(1)
-            endeff_velocities[3:] = [vel * self.action_scale if abs(vel) >= self.deadband else 0 for vel in [r, p, y]]
+            ee_dot[3:] = [vel * self.scale[i + 3] if abs(vel) >= self.deadband else 0 for i, vel in enumerate([r, p, y])]
 
         # Button Press
         a, b = self.gamepad.get_button(0), self.gamepad.get_button(1)
         x, y, stop = self.gamepad.get_button(2), self.gamepad.get_button(3), self.gamepad.get_button(7)
-        return endeff_velocities, a, b, x, y, stop
+        return ee_dot, a, b, x, y, stop
 
 
 def marionette() -> None:
