@@ -113,8 +113,9 @@ class ResolvedRateControl(toco.PolicyModule):
 
         # Control Logic --> Compute P Torque (feedback) & Inverse Dynamics Torque (feedforward)
         torque_feedback = self.p(joint_vel_current, joint_vel_desired)
-        torque_feedforward = self.invdyn(joint_pos_current, joint_vel_current, torch.zeros_like(joint_pos_current))
-        torque_out = torque_feedback + torque_feedforward
+        # torque_feedforward = self.invdyn(joint_pos_current, joint_vel_current, torch.zeros_like(joint_pos_current))
+        # torque_out = torque_feedback + torque_feedforward
+        torque_out = torque_feedback
 
         return {"joint_torques": torque_out}
 
