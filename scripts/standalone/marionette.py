@@ -300,27 +300,40 @@ class FrankaEnv(Env):
 
 # === Logitech Gamepad/Joystick Controller ===
 class JoystickControl:
-    def __init__(self, axis_scale: float = 1.0) -> None:
+    def __init__(self, action_scale: float = 0.25) -> None:
         pygame.init()
         self.gamepad = pygame.joystick.Joystick(0)
         self.gamepad.init()
-        self.deadband, self.axis_scale = 0.1, axis_scale
+        self.deadband, self.action_scale = 0.1, action_scale
 
-    def input(self) -> Tuple[List[float], bool, bool, bool, bool, bool]:
+    def input(self) -> Tuple[np.ndarray, bool, bool, bool, bool, bool]:
         pygame.event.get()
-        zs = []
 
-        # Get 6 axis (0-1 = left joystick, 2 = left trigger, 3-4 = right joystick, 5 = right trigger)
-        for i in range(6):
-            z = self.gamepad.get_axis(i)
-            if abs(z) < self.deadband:
-                z = 0.0
-            zs.append(z * self.axis_scale)
+        # Reference for the various Joystick `get_axis(i)` --> this is mostly applicable to the Logitech Gamepad...
+        #   =>> axis = 0 :: Left Joystick -- right is positive, left is negative (*ignored*)
+        #   =>> axis = 1 :: Left Joystick -- up is negative, down is positive (*used for z/yaw control*)
+        #   =>> axis = 2 :: Left Trigger -- "off" is negative, "on" is positive (*ignored*)
+        #
+        #   =>> axis = 3 :: Right Joystick -- right is positive, left is negative (*used for x/roll control*)
+        #   =>> axis = 4 :: Right Joystick -- up is negative, down is positive (*used for y/pitch control*)
+        #   =>> axis = 5 :: Right Trigger -- "off" is negative, "on" is positive (*used for mode-switching*)
+
+        # Directly compute end-effector velocities from joystick inputs -- switch on right-trigger
+        mode = "linear" if self.gamepad.get_axis(5) < 0 else "angular"
+        endeff_velocities = np.zeros(6)
+
+        # Iterate through three axes (x/roll, y/pitch, z/yaw) --> in that order (flipping signs for the latter two axes)
+        if mode == "linear":
+            x, y, z = self.gamepad.get_axis(3), -self.gamepad.get_axis(4), -self.gamepad.get_axis(1)
+            endeff_velocities[:3] = [vel * self.action_scale if abs(vel) >= self.deadband else 0 for vel in [x, y, z]]
+        else:
+            r, p, y = self.gamepad.get_axis(3), -self.gamepad.get_axis(4), -self.gamepad.get_axis(1)
+            endeff_velocities[3:] = [vel * self.action_scale if abs(vel) >= self.deadband else 0 for vel in [r, p, y]]
 
         # Button Press
         a, b = self.gamepad.get_button(0), self.gamepad.get_button(1)
         x, y, stop = self.gamepad.get_button(2), self.gamepad.get_button(3), self.gamepad.get_button(7)
-        return zs, a, b, x, y, stop
+        return endeff_velocities, a, b, x, y, stop
 
 
 def marionette() -> None:
@@ -351,19 +364,14 @@ def marionette() -> None:
     try:
         while True:
             # Measure Joystick Input
-            zs, _, _, _, _, stop = joystick.input()
-            for idx, z in enumerate(zs):
-                print(f"{idx}: {z}")
-            print()
-            time.sleep(0.5)
+            endeff_velocities, _, _, _, _, stop = joystick.input()
 
-            # AXES
-            # 0 -- (left joystick -- right is positive, left is negative)
-            # 1 -- (left joystick -- up is negative, down is positive)
-            # 2 -- (left trigger -- IGNORE)
-            # 3 -- (right joystick -- right is positive, left is negative)
-            # 4 -- (right joystick -- up is negative, down is positive)
-            # 5 -- (right trigger -- negative is "off", positive is "on")
+            if stop:
+                # Gracefully exit...
+                break
+
+            # Otherwise, drop into velocity control...
+            env.step(endeff_velocities)
 
     except KeyboardInterrupt:
         # Just don't crash the program on Ctrl-C or Socket Error (Controller Death)
