@@ -300,7 +300,7 @@ class FrankaEnv(Env):
 
 # === Logitech Gamepad/Joystick Controller ===
 class JoystickControl:
-    def __init__(self, scale: Tuple[float, ...] = (0.25, 0.25, 0.25, 0.5, 0.5, 0.5)) -> None:
+    def __init__(self, scale: Tuple[float, ...] = (0.25, 0.25, 0.25, 0.75, 0.75, 0.75)) -> None:
         pygame.init()
         self.gamepad = pygame.joystick.Joystick(0)
         self.gamepad.init()
