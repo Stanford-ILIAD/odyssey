@@ -50,7 +50,7 @@ KQ_GAINS, KQD_GAINS = {"default": [600, 600, 600, 600, 250, 150, 50]}, {"default
 KX_GAINS, KXD_GAINS = {"default": [150, 150, 150, 10, 10, 10]}, {"default": [25, 25, 25, 7, 7, 7]}
 
 # Resolved Rate Controller Gains =>> should get lower as you get to the end-effector...
-KRR_GAINS = {"default": [50, 50, 50, 50, 30, 25, 15]}
+KRR_GAINS = {"default": [50, 50, 50, 50, 30, 20, 10]}
 # fmt: on
 
 
