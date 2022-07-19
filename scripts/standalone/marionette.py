@@ -50,7 +50,7 @@ KQ_GAINS, KQD_GAINS = {"default": [600, 600, 600, 600, 250, 150, 50]}, {"default
 KX_GAINS, KXD_GAINS = {"default": [150, 150, 150, 10, 10, 10]}, {"default": [25, 25, 25, 7, 7, 7]}
 
 # Resolved Rate Controller Gains =>> should be uniform...
-KRR_GAINS = {"default": [30, 30, 30, 30, 30, 30, 30]}
+KRR_GAINS = {"default": [30, 30, 30, 30, 30, 30, 10]}
 # fmt: on
 
 
@@ -115,6 +115,9 @@ class ResolvedRateControl(toco.PolicyModule):
         torque_feedback = self.p(joint_vel_current, joint_vel_desired)
         torque_feedforward = self.invdyn(joint_pos_current, joint_vel_current, torch.zeros_like(joint_pos_current))
         torque_out = torque_feedback + torque_feedforward
+
+        # Debug...
+        print("Torque Out:", torque_out)
 
         return {"joint_torques": torque_out}
 
