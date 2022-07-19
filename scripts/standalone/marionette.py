@@ -116,9 +116,6 @@ class ResolvedRateControl(toco.PolicyModule):
         torque_feedforward = self.invdyn(joint_pos_current, joint_vel_current, torch.zeros_like(joint_pos_current))
         torque_out = torque_feedback + torque_feedforward
 
-        # Debug...
-        print("Torque Out:", torque_out)
-
         return {"joint_torques": torque_out}
 
 
