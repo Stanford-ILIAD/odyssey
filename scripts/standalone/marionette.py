@@ -299,19 +299,19 @@ class FrankaEnv(Env):
 
 
 # === Logitech Gamepad/Joystick Controller ===
-class JoystickControl(object):
-    def __init__(self, axis_scale=1.0):
+class JoystickControl:
+    def __init__(self, axis_scale: float = 1.0) -> None:
         pygame.init()
         self.gamepad = pygame.joystick.Joystick(0)
         self.gamepad.init()
         self.deadband, self.axis_scale = 0.1, axis_scale
 
-    def input(self):
+    def input(self) -> Tuple[List[float], bool, bool, bool, bool, bool]:
         pygame.event.get()
         zs = []
 
-        # Get 5 axis (0-1 = right joystick, 2 = triggers, 3-4 = left joystick)
-        for i in range(5):
+        # Get 6 axis (0-1 = left joystick, 2 = left trigger, 3-4 = right joystick, 5 = right trigger)
+        for i in range(6):
             z = self.gamepad.get_axis(i)
             if abs(z) < self.deadband:
                 z = 0.0
@@ -358,9 +358,12 @@ def marionette() -> None:
             time.sleep(0.5)
 
             # AXES
+            # 0 -- (left joystick -- right is positive, left is negative)
             # 1 -- (left joystick -- up is negative, down is positive)
+            # 2 -- (left trigger -- IGNORE)
             # 3 -- (right joystick -- right is positive, left is negative)
             # 4 -- (right joystick -- up is negative, down is positive)
+            # 5 -- (right trigger -- negative is "off", positive is "on")
 
     except KeyboardInterrupt:
         # Just don't crash the program on Ctrl-C or Socket Error (Controller Death)
