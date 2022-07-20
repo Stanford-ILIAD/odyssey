@@ -19,7 +19,7 @@ import numpy as np
 import torch
 import torchcontrol as toco
 from gym import Env
-from polymetis import RobotInterface
+from polymetis import GripperInterface, RobotInterface
 from scipy.spatial.transform import Rotation as R
 
 
@@ -39,6 +39,10 @@ HZ = 20
 
 # fmt: off
 HOMES = {"default": [0.0, -np.pi / 4.0, 0.0, -3.0 * np.pi / 4.0, 0.0, np.pi / 2.0, np.pi / 4.0]}
+
+# Control Frequency & other useful constants...
+#   > Ref: Gripper constants from: https://frankaemika.github.io/libfranka/grasp_object_8cpp-example.html
+HZ, GRIPPER_SPEED, GRIPPER_FORCE, GRIPPER_MAX_WIDTH, GRIPPER_TOLERANCE = 60, 0.3, 60, 0.08570, 0.01
 
 # Joint Impedance Controller gains...
 #   =>> Libfranka Defaults (https://frankaemika.github.io/libfranka/joint_impedance_control_8cpp-example.html)
@@ -177,9 +181,10 @@ class FrankaEnv(Env):
         :param step_size: Step size to use for `time_to_go` calculations...
         """
         self.home, self.rate, self.mode, self.controller, self.curr_step = home, Rate(hz), mode, controller, 0
-        self.current_joint_pose, self.current_ee_pose, self.current_ee_rot = None, None, None
-        self.robot, self.kp, self.kpd = None, None, None
+        self.current_joint_pose, self.current_ee_pose, self.current_ee_rot, self.current_gripper_state = None, None, None, None
+        self.robot, self.gripper, self.kp, self.kpd = None, None, None, None
         self.step_size = step_size
+        self.initial_gripper_state, self.gripper_open = None, True
 
         # Initialize Robot and PD Controller
         self.reset()
@@ -216,6 +221,21 @@ class FrankaEnv(Env):
         else:
             raise NotImplementedError(f"Support for controller `{self.controller}` not yet implemented!")
 
+        # Initialize Gripper Interface and Open
+        if self.initialize_gripper:
+            self.gripper = GripperInterface(ip_address=franka_ip)
+            self.gripper.goto(GRIPPER_MAX_WIDTH, speed=GRIPPER_SPEED, force=GRIPPER_FORCE)
+            gripper_state = self.gripper.get_state()
+            self.initial_gripper_state, self.current_gripper_state = {
+                "width": gripper_state.width,
+                "max_width": gripper_state.max_width,
+            }
+            self.gripper_open = True
+        
+        else:
+            raise NotImplementedError(f"Support for controller `{self.controller}` not yet implemented!")
+
+
     def reset(self) -> Dict[str, np.ndarray]:
         # Set PD Gains -- kp, kpd -- depending on current mode, controller
         if self.controller == "joint" and not self.mode == "default":
@@ -227,7 +247,14 @@ class FrankaEnv(Env):
 
         # Call setup with the new controller...
         self.robot_setup(self.home)
+
+        if self.initialize_gripper:
+            return self.get_obs_with_gripper()
+        else:
+            return self.get_obs()
+
         return self.get_obs()
+
 
     def get_obs(self) -> Dict[str, np.ndarray]:
         new_joint_pose = self.robot.get_joint_positions().numpy()
@@ -246,6 +273,30 @@ class FrankaEnv(Env):
         # Bump "current" trackers...
         self.current_joint_pose, self.current_ee_pose, self.current_ee_rot = new_joint_pose, new_ee_pose, new_ee_rot
         return obs
+
+
+    def get_obs_with_gripper(self) -> Dict[str, np.ndarray]:
+        new_joint_pose = self.robot.get_joint_positions().numpy()
+        new_ee_pose = np.concatenate([a.numpy() for a in self.robot.get_ee_pose()])
+        new_gripper_state = self.gripper.get_state()
+
+        # Note that deltas are "shifted" 1 time step to the right from the corresponding "state"
+        obs = {
+            "q": new_joint_pose,
+            "qdot": self.robot.get_joint_velocities().numpy(),
+            "delta_q": new_joint_pose - self.current_joint_pose,
+            "ee_pose": new_ee_pose,
+            "delta_ee_pose": new_ee_pose - self.current_ee_pose,
+            "gripper_width": new_gripper_state.width,
+            "gripper_max_width": new_gripper_state.max_width,
+            "gripper_open": self.gripper_open,
+        }
+
+        # Bump "current" poses...
+        self.current_joint_pose, self.current_ee_pose = new_joint_pose, new_ee_pose
+        self.current_gripper_state = {"width": new_gripper_state.width, "max_width": new_gripper_state.max_width}
+        return obs
+
 
     def step(self, action: Optional[np.ndarray]) -> Tuple[Dict[str, np.ndarray], int, bool, None]:
         """Run a step in the environment, where `delta` specifies if we are sending absolute poses or deltas in poses!"""
@@ -273,6 +324,35 @@ class FrankaEnv(Env):
 
         # Return observation, Gym default signature...
         return self.get_obs(), 0, False, None
+
+
+    def step_with_gripper(
+        self, action: Optional[np.ndarray], open_gripper: Optional[bool]
+    ) -> Tuple[Dict[str, np.ndarray], int, bool, None]:
+        """Run a step in the environment, where `delta` specifies if we are sending absolute poses or deltas in poses!"""
+        if action is not None:
+            if self.controller == "joint":
+                self.robot.update_desired_joint_positions(torch.from_numpy(action))
+            elif self.controller == "cartesian":
+                # First 3 elements are xyz, last 4 elements are quaternion orientation...
+                self.robot.update_desired_ee_pose(
+                    position=torch.from_numpy(action[:3]), orientation=torch.from_numpy(action[3:])
+                )
+
+        if open_gripper is not None and (self.gripper_open ^ open_gripper):
+            # True --> Open Gripper, otherwise --> Close Gripper
+            print(f"[*] Setting gripper to {'OPEN' if open_gripper else 'CLOSED'}")
+            self.gripper_open = open_gripper
+            if open_gripper:
+                self.gripper.goto(GRIPPER_MAX_WIDTH, speed=GRIPPER_SPEED, force=GRIPPER_FORCE)
+            else:
+                self.gripper.grasp(speed=GRIPPER_SPEED, force=GRIPPER_FORCE)
+
+        # Sleep according to control frequency
+        self.rate.sleep()
+
+        # Return observation, Gym default signature...
+        return self.get_obs_with_gripper(), 0, False, None
 
     @property
     def ee_position(self) -> np.ndarray:
