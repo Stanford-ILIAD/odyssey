@@ -1,5 +1,5 @@
 """
-marionette.py
+teleoperate.py
 
 Standalone script for 6-DoF (joystick-based) teleoperated control of a Franka Emika Panda Arm, using Polymetis.
 Additionally supports functionality for testing trajectory following and visualization, as well as hooks for other
