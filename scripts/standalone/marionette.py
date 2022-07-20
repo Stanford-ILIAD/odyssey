@@ -324,16 +324,20 @@ class JoystickControl:
 
         # Iterate through three axes (x/roll, y/pitch, z/yaw) --> in that order (flipping signs for the latter two axes)
         if mode == "linear":
-            x, y, z = self.gamepad.get_axis(3), -self.gamepad.get_axis(4), -self.gamepad.get_axis(1)
+            x, y, z = -self.gamepad.get_axis(4), -self.gamepad.get_axis(3), -self.gamepad.get_axis(1)
             ee_dot[:3] = [vel * self.scale[i] if abs(vel) >= self.deadband else 0 for i, vel in enumerate([x, y, z])]
         else:
-            r, p, y = self.gamepad.get_axis(3), -self.gamepad.get_axis(4), -self.gamepad.get_axis(1)
+            r, p, y = -self.gamepad.get_axis(4), -self.gamepad.get_axis(3), -self.gamepad.get_axis(1)
             ee_dot[3:] = [vel * self.scale[i + 3] if abs(vel) >= self.deadband else 0 for i, vel in enumerate([r, p, y])]
 
         # Button Press
         a, b = self.gamepad.get_button(0), self.gamepad.get_button(1)
         x, y, stop = self.gamepad.get_button(2), self.gamepad.get_button(3), self.gamepad.get_button(7)
+
+        
         return ee_dot, a, b, x, y, stop
+
+        
 
 
 def marionette() -> None:
