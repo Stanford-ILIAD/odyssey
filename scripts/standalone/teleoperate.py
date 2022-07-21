@@ -169,7 +169,7 @@ class OdysseyRobotInterface(RobotInterface):
 # === Polymetis Environment Wrapper ===
 class FrankaEnv(Env):
     def __init__(
-        self, home: str, hz: int, controller: str = "cartesian", mode: str = "default", step_size: float = 0.05
+        self, home: str, hz: int, controller: str = "cartesian", mode: str = "default", step_size: float = 0.05, initialize_gripper: bool = False
     ) -> None:
         """
         Initialize a *physical* Franka Environment, with the given home pose, PD controller gains, and camera.
@@ -185,6 +185,7 @@ class FrankaEnv(Env):
         self.robot, self.gripper, self.kp, self.kpd = None, None, None, None
         self.step_size = step_size
         self.initial_gripper_state, self.gripper_open = None, True
+        self.initialize_gripper = initialize_gripper
 
         # Initialize Robot and PD Controller
         self.reset()
@@ -231,9 +232,6 @@ class FrankaEnv(Env):
                 "max_width": gripper_state.max_width,
             }
             self.gripper_open = True
-        
-        else:
-            raise NotImplementedError(f"Support for controller `{self.controller}` not yet implemented!")
 
 
     def reset(self) -> Dict[str, np.ndarray]:
