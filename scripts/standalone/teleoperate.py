@@ -411,8 +411,13 @@ class JoystickControl:
         # Button Press
         a, b = self.gamepad.get_button(0), self.gamepad.get_button(1)
         x, y, stop = self.gamepad.get_button(2), self.gamepad.get_button(3), self.gamepad.get_button(7)
+            
+        if self.gamepad.get_pressed()[1] == True:
+            grip
 
-        
+        FIXME ### GRIPPER ACTIVATION
+
+
         return ee_dot, a, b, x, y, stop
 
         
