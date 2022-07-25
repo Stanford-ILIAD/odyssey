@@ -42,7 +42,7 @@ HOMES = {"default": [0.0, -np.pi / 4.0, 0.0, -3.0 * np.pi / 4.0, 0.0, np.pi / 2.
 
 # Control Frequency & other useful constants...
 #   > Ref: Gripper constants from: https://frankaemika.github.io/libfranka/grasp_object_8cpp-example.html
-HZ, GRIPPER_SPEED, GRIPPER_FORCE, GRIPPER_MAX_WIDTH, GRIPPER_TOLERANCE = 60, 0.3, 60, 0.08570, 0.01
+GRIPPER_SPEED, GRIPPER_FORCE, GRIPPER_MAX_WIDTH, GRIPPER_TOLERANCE = 0.3, 60, 0.08570, 0.01
 
 # Joint Impedance Controller gains...
 #   =>> Libfranka Defaults (https://frankaemika.github.io/libfranka/joint_impedance_control_8cpp-example.html)
@@ -189,7 +189,7 @@ class FrankaEnv(Env):
         self.home, self.rate, self.mode, self.controller, self.curr_step = home, Rate(hz), mode, controller, 0
         self.current_joint_pose, self.current_ee_pose, self.current_ee_rot = None, None, None
         self.robot, self.kp, self.kpd, self.step_size = None, None, None, step_size
-        self.use_gripper, self.gripper, self.current_gripper_state, self.gripper_open = use_gripper, None, None, True
+        self.use_gripper, self.gripper, self.current_gripper_state, self.gripper_is_open = use_gripper, None, None, True
 
         # Initialize Robot and PD Controller
         self.reset()
@@ -232,7 +232,7 @@ class FrankaEnv(Env):
             self.gripper.goto(GRIPPER_MAX_WIDTH, speed=GRIPPER_SPEED, force=GRIPPER_FORCE)
             gripper_state = self.gripper.get_state()
             self.current_gripper_state = {"width": gripper_state.width, "max_width": gripper_state.max_width}
-            self.gripper_open = True
+            self.gripper_is_open = True
 
     def reset(self) -> Dict[str, np.ndarray]:
         # Set PD Gains -- kp, kpd -- depending on current mode, controller
@@ -245,65 +245,69 @@ class FrankaEnv(Env):
 
         # Call setup with the new controller...
         self.robot_setup(self.home)
-
-        # Gripper-Specific Logic
-        if self.use_gripper:
-            return self.get_obs_with_gripper()
-        else:
-            return self.get_obs()
+        return self.get_obs()
 
     def get_obs(self) -> Dict[str, np.ndarray]:
         new_joint_pose = self.robot.get_joint_positions().numpy()
         new_ee_pose = np.concatenate([a.numpy() for a in self.robot.get_ee_pose()])
         new_ee_rot = R.from_quat(new_ee_pose[3:]).as_euler("xyz")
 
-        # Note that deltas are "shifted" 1 time step to the right from the corresponding "state"
-        obs = {
-            "q": new_joint_pose,
-            "qdot": self.robot.get_joint_velocities().numpy(),
-            "delta_q": new_joint_pose - self.current_joint_pose,
-            "ee_pose": new_ee_pose,
-            "delta_ee_pose": new_ee_pose - self.current_ee_pose,
-        }
+        if self.use_gripper:
+            new_gripper_state = self.gripper.get_state()
+            # Note that deltas are "shifted" 1 time step to the right from the corresponding "state"
+            obs = {
+                "q": new_joint_pose,
+                "qdot": self.robot.get_joint_velocities().numpy(),
+                "delta_q": new_joint_pose - self.current_joint_pose,
+                "ee_pose": new_ee_pose,
+                "delta_ee_pose": new_ee_pose - self.current_ee_pose,
+                "gripper_width": new_gripper_state.width,
+                "gripper_max_width": new_gripper_state.max_width,
+                "gripper_open": self.gripper_is_open,
+            }
 
-        # Bump "current" trackers...
-        self.current_joint_pose, self.current_ee_pose, self.current_ee_rot = new_joint_pose, new_ee_pose, new_ee_rot
-        return obs
+            # Bump "current" poses...
+            self.current_joint_pose, self.current_ee_pose = new_joint_pose, new_ee_pose
+            self.current_gripper_state = {"width": new_gripper_state.width, "max_width": new_gripper_state.max_width}
+            return obs
 
-    def get_obs_with_gripper(self) -> Dict[str, np.ndarray]:
-        new_joint_pose = self.robot.get_joint_positions().numpy()
-        new_ee_pose = np.concatenate([a.numpy() for a in self.robot.get_ee_pose()])
-        new_gripper_state = self.gripper.get_state()
+        else:
+            # Note that deltas are "shifted" 1 time step to the right from the corresponding "state"
+            obs = {
+                "q": new_joint_pose,
+                "qdot": self.robot.get_joint_velocities().numpy(),
+                "delta_q": new_joint_pose - self.current_joint_pose,
+                "ee_pose": new_ee_pose,
+                "delta_ee_pose": new_ee_pose - self.current_ee_pose,
+            }
 
-        # Note that deltas are "shifted" 1 time step to the right from the corresponding "state"
-        obs = {
-            "q": new_joint_pose,
-            "qdot": self.robot.get_joint_velocities().numpy(),
-            "delta_q": new_joint_pose - self.current_joint_pose,
-            "ee_pose": new_ee_pose,
-            "delta_ee_pose": new_ee_pose - self.current_ee_pose,
-            "gripper_width": new_gripper_state.width,
-            "gripper_max_width": new_gripper_state.max_width,
-            "gripper_open": self.gripper_open,
-        }
+            # Bump "current" trackers...
+            self.current_joint_pose, self.current_ee_pose, self.current_ee_rot = new_joint_pose, new_ee_pose, new_ee_rot
+            return obs
 
-        # Bump "current" poses...
-        self.current_joint_pose, self.current_ee_pose = new_joint_pose, new_ee_pose
-        self.current_gripper_state = {"width": new_gripper_state.width, "max_width": new_gripper_state.max_width}
-        return obs
-
-    def step(self, action: Optional[np.ndarray]) -> Tuple[Dict[str, np.ndarray], int, bool, None]:
+    def step(
+        self, action: Optional[np.ndarray], delta: bool = False, open_gripper: Optional[bool] = None
+    ) -> Tuple[Dict[str, np.ndarray], int, bool, None]:
         """Run a step in the environment, where `delta` specifies if we are sending absolute poses or deltas in poses!"""
         if action is not None:
             if self.controller == "joint":
-                # Joint Impedance Controller expects 7D Joint Angles
-                q = torch.from_numpy(action)
-                self.robot.update_desired_joint_positions(q)
+                if not delta:
+                    # Joint Impedance Controller expects 7D Joint Angles
+                    q = torch.from_numpy(action)
+                    self.robot.update_desired_joint_positions(q)
+                else:
+                    raise NotImplementedError("Delta control for Joint Impedance Controller not yet implemented!")
 
             elif self.controller == "cartesian":
-                # Cartesian controller expects tuple -- first 3 elements are xyz, last 4 are quaternion orientation...
-                pos, ori = torch.from_numpy(action[:3]), torch.from_numpy(action[3:])
-                self.robot.update_desired_ee_pose(position=pos, orientation=ori)
+                if not delta:
+                    # Cartesian controller expects tuple -- first 3 elements are xyz, last 4 are quaternion orientation
+                    pos, ori = torch.from_numpy(action[:3]), torch.from_numpy(action[3:])
+                    self.robot.update_desired_ee_pose(position=pos, orientation=ori)
+                else:
+                    # Convert from 6-DoF (x, y, z, roll, pitch, yaw) if necessary...
+                    import IPython
+
+                    IPython.embed()
 
             elif self.controller == "resolved-rate":
                 # Resolved rate controller expects 6D end-effector velocities (deltas) in X/Y/Z/Roll/Pitch/Yaw...
@@ -313,29 +317,10 @@ class FrankaEnv(Env):
             else:
                 raise NotImplementedError(f"Controller mode `{self.controller}` not supported!")
 
-        # Sleep according to control frequency
-        self.rate.sleep()
-
-        # Return observation, Gym default signature...
-        return self.get_obs(), 0, False, None
-
-    def step_with_gripper(
-        self, action: Optional[np.ndarray], open_gripper: Optional[bool]
-    ) -> Tuple[Dict[str, np.ndarray], int, bool, None]:
-        """Run a step in the environment, where `delta` specifies if we are sending absolute poses or deltas in poses!"""
-        if action is not None:
-            if self.controller == "joint":
-                self.robot.update_desired_joint_positions(torch.from_numpy(action))
-            elif self.controller == "cartesian":
-                # First 3 elements are xyz, last 4 elements are quaternion orientation...
-                self.robot.update_desired_ee_pose(
-                    position=torch.from_numpy(action[:3]), orientation=torch.from_numpy(action[3:])
-                )
-
-        if open_gripper is not None and (self.gripper_open ^ open_gripper):
+        # Gripper Handling...
+        if open_gripper is not None and (self.gripper_is_open ^ open_gripper):
             # True --> Open Gripper, otherwise --> Close Gripper
-            print(f"[*] Setting gripper to {'OPEN' if open_gripper else 'CLOSED'}")
-            self.gripper_open = open_gripper
+            self.gripper_is_open = open_gripper
             if open_gripper:
                 self.gripper.goto(GRIPPER_MAX_WIDTH, speed=GRIPPER_SPEED, force=GRIPPER_FORCE)
             else:
@@ -345,7 +330,7 @@ class FrankaEnv(Env):
         self.rate.sleep()
 
         # Return observation, Gym default signature...
-        return self.get_obs_with_gripper(), 0, False, None
+        return self.get_obs(), 0, False, None
 
     @property
     def ee_position(self) -> np.ndarray:
@@ -412,11 +397,19 @@ class JoystickControl:
 
 def teleoperate() -> None:
     """Run 6-DoF Teleoperation w/ a Joystick --> 2 modes, 3 Joystick axes :: (x, y, z) || (roll, pitch, yaw)."""
+    # rr_cfg = {
+    #     "id": "default-resolved-rate",
+    #     "home": "default",
+    #     "hz": HZ,
+    #     "controller": "resolved-rate",
+    #     "mode": "default",
+    #     "step_size": 0.05,
+    # }
     cfg = {
-        "id": "default-resolved-rate",
+        "id": "default-ee-impedance",
         "home": "default",
         "hz": HZ,
-        "controller": "resolved-rate",
+        "controller": "cartesian",
         "mode": "default",
         "step_size": 0.05,
     }
@@ -431,7 +424,12 @@ def teleoperate() -> None:
     # Initialize environment & get initial poses...
     print("[*] Initializing Robot Connection...")
     env = FrankaEnv(
-        home=cfg["home"], hz=cfg["hz"], controller=cfg["controller"], mode=cfg["mode"], step_size=cfg["step_size"], use_gripper=True,
+        home=cfg["home"],
+        hz=cfg["hz"],
+        controller=cfg["controller"],
+        mode=cfg["mode"],
+        step_size=cfg["step_size"],
+        use_gripper=True,
     )
 
     print("[*] Dropping into Teleoperation Loop...")
@@ -445,10 +443,12 @@ def teleoperate() -> None:
                 break
 
             if b:
-                env.step_with_gripper(endeff_velocities, not env.gripper_open)
+                # Trigger Gripper...
+                env.step(endeff_velocities, delta=True, open_gripper=not env.gripper_is_open)
 
-            # Otherwise, drop into velocity control...
-            env.step(endeff_velocities)
+            else:
+                # Otherwise, we're just running end-effector teleoperation
+                env.step(endeff_velocities, delta=True)
 
     except KeyboardInterrupt:
         # Just don't crash the program on Ctrl-C or Socket Error (Controller Death)
