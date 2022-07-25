@@ -381,15 +381,15 @@ class JoystickControl:
 
         # Directly compute end-effector velocities from joystick inputs -- switch on right-trigger
         mode = "linear" if self.gamepad.get_axis(5) < 0 else "angular"
-        ee_dot = np.zeros(6)
+        ee_dot = np.zeros(7)
 
         # Iterate through three axes (x/roll, y/pitch, z/yaw) --> in that order (flipping signs for the latter two axes)
         if mode == "linear":
             x, y, z = -self.gamepad.get_axis(4), -self.gamepad.get_axis(3), -self.gamepad.get_axis(1)
             ee_dot[:3] = [vel * self.scale[i] if abs(vel) >= self.deadband else 0 for i, vel in enumerate([x, y, z])]
         else:
-            r, p, y = -self.gamepad.get_axis(4), -self.gamepad.get_axis(3), -self.gamepad.get_axis(1)
-            ee_dot[3:] = [vel * self.scale[i + 3] if abs(vel) >= self.deadband else 0 for i, vel in enumerate([r, p, y])]
+            r, p, y_left_right, y_up_down = -self.gamepad.get_axis(3), -self.gamepad.get_axis(4), self.gamepad.get_axis(1), -self.gamepad.get_axis(3)
+            ee_dot[3:] = [vel * self.scale[i + 3] if abs(vel) >= self.deadband else 0 for i, vel in enumerate([r, p, y_left_right, y_up_down])]
 
         # Button Press
         a, b = self.gamepad.get_button(0), self.gamepad.get_button(1)
