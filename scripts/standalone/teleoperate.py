@@ -429,20 +429,23 @@ def teleoperate() -> None:
     joystick = JoystickControl()
 
     # Initialize environment & get initial poses...
-    print("[*] Initializing robot connection...")
+    print("[*] Initializing Robot Connection...")
     env = FrankaEnv(
-        home=cfg["home"], hz=cfg["hz"], controller=cfg["controller"], mode=cfg["mode"], step_size=cfg["step_size"]
+        home=cfg["home"], hz=cfg["hz"], controller=cfg["controller"], mode=cfg["mode"], step_size=cfg["step_size"], use_gripper=True,
     )
 
     print("[*] Dropping into Teleoperation Loop...")
     try:
         while True:
             # Measure Joystick Input
-            endeff_velocities, _, _, _, _, stop = joystick.input()
+            endeff_velocities, _, b, _, _, stop = joystick.input()
 
             if stop:
                 # Gracefully exit...
                 break
+
+            if b:
+                env.step_with_gripper(endeff_velocities, not env.gripper_open)
 
             # Otherwise, drop into velocity control...
             env.step(endeff_velocities)
