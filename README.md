@@ -138,6 +138,10 @@ conda install ipython jupyter
 
 pip install black flake8 gym isort matplotlib pre-commit
 
+# Install Polymetis dependencies...
+pip install "git+https://github.com/siddk/polymetis-dev#egg=polymetis&subdirectory=polymetis"
+
+
 # Install other dependencies via pip below -- conda dependencies should be added above (always conda before pip!)
 ...
 ```
