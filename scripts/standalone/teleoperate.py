@@ -301,13 +301,16 @@ class FrankaEnv(Env):
             elif self.controller == "cartesian":
                 if not delta:
                     # Cartesian controller expects tuple -- first 3 elements are xyz, last 4 are quaternion orientation
-                    pos, ori = torch.from_numpy(action[:3]), torch.from_numpy(action[3:])
-                    self.robot.update_desired_ee_pose(position=pos, orientation=ori)
+                    pos, quat = torch.from_numpy(action[:3]), torch.from_numpy(action[3:])
+                    self.robot.update_desired_ee_pose(position=pos, orientation=quat)
                 else:
                     # Convert from 6-DoF (x, y, z, roll, pitch, yaw) if necessary...
-                    import IPython
+                    assert len(action) == 6, "Delta Control for Cartesian Impedance only supported for Euler Angles!"
+                    pos, angle = torch.from_numpy(self.ee_position + action[:3]), self.ee_orientation + action[3:]
 
-                    IPython.embed()
+                    # Convert angle =>> quaternion (Polymetis expects scalar first, so roll...)
+                    quat = torch.from_numpy(np.roll(R.from_euler("xyz", angle).as_quat(), 1))
+                    self.robot.update_desired_ee_pose(position=pos, orientation=quat)
 
             elif self.controller == "resolved-rate":
                 # Resolved rate controller expects 6D end-effector velocities (deltas) in X/Y/Z/Roll/Pitch/Yaw...
