@@ -400,22 +400,27 @@ class JoystickControl:
 
 def teleoperate() -> None:
     """Run 6-DoF Teleoperation w/ a Joystick --> 2 modes, 3 Joystick axes :: (x, y, z) || (roll, pitch, yaw)."""
-    # rr_cfg = {
-    #     "id": "default-resolved-rate",
-    #     "home": "default",
-    #     "hz": HZ,
-    #     "controller": "resolved-rate",
-    #     "mode": "default",
-    #     "step_size": 0.05,
-    # }
+
+    # Resolved Rate Controller...
     cfg = {
-        "id": "default-ee-impedance",
+        "id": "default-resolved-rate",
         "home": "default",
         "hz": HZ,
-        "controller": "cartesian",
+        "controller": "resolved-rate",
         "mode": "default",
         "step_size": 0.05,
     }
+
+    # EE Impedance Controller...
+    # cfg = {
+    #     "id": "default-ee-impedance",
+    #     "home": "default",
+    #     "hz": HZ,
+    #     "controller": "cartesian",
+    #     "mode": "default",
+    #     "step_size": 0.05,
+    # }
+
     print(f"[*] Attempting teleoperation with motion controller `{cfg['controller']}` and `{cfg['id']}` config:")
     for key in cfg:
         print(f"\t`{key}` =>> `{cfg[key]}`")
