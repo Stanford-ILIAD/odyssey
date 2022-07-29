@@ -42,7 +42,7 @@ HOMES = {"default": [0.0, -np.pi / 4.0, 0.0, -3.0 * np.pi / 4.0, 0.0, np.pi / 2.
 
 # Control Frequency & other useful constants...
 #   > Ref: Gripper constants from: https://frankaemika.github.io/libfranka/grasp_object_8cpp-example.html
-GRIPPER_SPEED, GRIPPER_FORCE, GRIPPER_MAX_WIDTH, GRIPPER_TOLERANCE = 0.3, 60, 0.08570, 0.01
+GRIPPER_SPEED, GRIPPER_FORCE, GRIPPER_MAX_WIDTH = 0.5, 60, 0.08570
 
 # Joint Impedance Controller gains...
 #   =>> Libfranka Defaults (https://frankaemika.github.io/libfranka/joint_impedance_control_8cpp-example.html)
@@ -51,7 +51,8 @@ KQ_GAINS, KQD_GAINS = {"default": [600, 600, 600, 600, 250, 150, 50]}, {"default
 # End-Effector Impedance Controller gains...
 #   =>> P :: Libfranka Defaults (https://frankaemika.github.io/libfranka/cartesian_impedance_control_8cpp-example.html)
 #   =>> D :: Libfranka Defaults = int(2 * sqrt(KP))
-KX_GAINS, KXD_GAINS = {"default": [150, 150, 150, 10, 10, 10]}, {"default": [25, 25, 25, 7, 7, 7]}
+KX_GAINS = {"default": [150, 150, 150, 10, 10, 10], "teleoperate": [200, 200, 200, 10, 10, 10]}
+KXD_GAINS = {"default": [25, 25, 25, 7, 7, 7], "teleoperate": [50, 50, 50, 7, 7, 7]}
 
 # Resolved Rate Controller Gains =>> should get lower as you get to the end-effector...
 KRR_GAINS = {"default": [50, 50, 50, 50, 30, 20, 10]}
@@ -381,15 +382,16 @@ class JoystickControl:
 
         # Directly compute end-effector velocities from joystick inputs -- switch on right-trigger
         mode = "linear" if self.gamepad.get_axis(5) < 0 else "angular"
-        ee_dot = np.zeros(7)
+        ee_dot = np.zeros(6)
 
         # Iterate through three axes (x/roll, y/pitch, z/yaw) --> in that order (flipping signs for the latter two axes)
         if mode == "linear":
             x, y, z = -self.gamepad.get_axis(4), -self.gamepad.get_axis(3), -self.gamepad.get_axis(1)
             ee_dot[:3] = [vel * self.scale[i] if abs(vel) >= self.deadband else 0 for i, vel in enumerate([x, y, z])]
         else:
-            r, p, y_left_right, y_up_down = -self.gamepad.get_axis(3), -self.gamepad.get_axis(4), self.gamepad.get_axis(1), -self.gamepad.get_axis(3)
-            ee_dot[3:] = [vel * self.scale[i + 3] if abs(vel) >= self.deadband else 0 for i, vel in enumerate([r, p, y_left_right, y_up_down])]
+            r, p, y = -self.gamepad.get_axis(3), -self.gamepad.get_axis(4), -self.gamepad.get_axis(0)
+            print(y)
+            ee_dot[3:] = [vel * self.scale[i + 3] if abs(vel) >= self.deadband else 0 for i, vel in enumerate([r, p, y])]
 
         # Button Press
         a, b = self.gamepad.get_button(0), self.gamepad.get_button(1)
@@ -417,7 +419,8 @@ def teleoperate() -> None:
     #     "home": "default",
     #     "hz": HZ,
     #     "controller": "cartesian",
-    #     "mode": "default",
+    #     # "mode": "default",
+    #     "mode":"teleoperate",
     #     "step_size": 0.05,
     # }
 
