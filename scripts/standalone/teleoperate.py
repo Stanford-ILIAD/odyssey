@@ -21,7 +21,7 @@ import torchcontrol as toco
 from gym import Env
 from polymetis import GripperInterface, RobotInterface
 from scipy.spatial.transform import Rotation as R
-from standalone import frankaEnv
+from frankaEnv import FrankaEnv
 
 
 # Suppress PyGame Import Text

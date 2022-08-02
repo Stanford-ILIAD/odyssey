@@ -1,3 +1,18 @@
+import logging
+import os
+import time
+from typing import Any, Dict, List, Optional, Tuple
+
+import grpc
+import gym
+import numpy as np
+import torch
+import torchcontrol as toco
+from gym import Env
+from polymetis import GripperInterface, RobotInterface
+from scipy.spatial.transform import Rotation as R
+
+
 # === Polymetis Environment Wrapper ===
 class FrankaEnv(Env):
     def __init__(
@@ -6,6 +21,7 @@ class FrankaEnv(Env):
         hz: int,
         controller: str = "cartesian",
         mode: str = "default",
+        step_size: float = 0.05,
         use_gripper: bool = False,
     ) -> None:
         """
