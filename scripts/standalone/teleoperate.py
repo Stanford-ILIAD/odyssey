@@ -42,7 +42,7 @@ HOMES = {"default": [0.0, -np.pi / 4.0, 0.0, -3.0 * np.pi / 4.0, 0.0, np.pi / 2.
 
 # Control Frequency & other useful constants...
 #   > Ref: Gripper constants from: https://frankaemika.github.io/libfranka/grasp_object_8cpp-example.html
-GRIPPER_SPEED, GRIPPER_FORCE, GRIPPER_MAX_WIDTH = 0.5, 60, 0.08570
+GRIPPER_SPEED, GRIPPER_FORCE, GRIPPER_MAX_WIDTH = 0.5, 120, 0.08570
 
 # Joint Impedance Controller gains...
 #   =>> Libfranka Defaults (https://frankaemika.github.io/libfranka/joint_impedance_control_8cpp-example.html)
@@ -390,7 +390,6 @@ class JoystickControl:
             ee_dot[:3] = [vel * self.scale[i] if abs(vel) >= self.deadband else 0 for i, vel in enumerate([x, y, z])]
         else:
             r, p, y = -self.gamepad.get_axis(3), -self.gamepad.get_axis(4), -self.gamepad.get_axis(0)
-            print(y)
             ee_dot[3:] = [vel * self.scale[i + 3] if abs(vel) >= self.deadband else 0 for i, vel in enumerate([r, p, y])]
 
         # Button Press
