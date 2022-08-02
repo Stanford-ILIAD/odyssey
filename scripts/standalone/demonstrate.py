@@ -258,9 +258,9 @@ class FrankaEnv(Env):
 
     def reset(self) -> Dict[str, np.ndarray]:
         # Set PD Gains -- kp, kpd -- depending on current mode, controller
-        if self.controller == "joint" and not self.mode == "default":
+        if self.controller == "joint":
             self.kp, self.kpd = KQ_GAINS[self.mode], KQD_GAINS[self.mode]
-        elif self.controller == "cartesian" and not self.mode == "default":
+        elif self.controller == "cartesian":
             self.kp, self.kpd = KX_GAINS[self.mode], KXD_GAINS[self.mode]
         elif self.controller == "resolved-rate":
             self.kp = KRR_GAINS[self.mode]
@@ -517,6 +517,7 @@ def demonstrate() -> None:
         if do_playback:
             # TODO(siddk) -- handle Camera observation logging...
             env.set_mode("default")
+            env.reset()
 
             # Block on User Ready -- Robot will move, so this is for safety...
             print("\tReady to playback! Get out of the way, and hit (A) to continue...")
