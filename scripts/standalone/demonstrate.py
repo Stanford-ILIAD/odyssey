@@ -1,16 +1,23 @@
 """
-teleoperate.py
+demonstrate.py
 
-Standalone script for 6-DoF (joystick-based) teleoperated control of a Franka Emika Panda Arm, using Polymetis.
-Additionally supports functionality for testing trajectory following and visualization, as well as hooks for other
-control interfaces (e.g., a SpaceMouse or Oculus/VR-based controller).
+Collect interleaved demonstrations (in the case of kinesthetic teaching) of recording a kinesthetic demo,
+then (optionally) playing back the demonstration to collect visual states.
 
-As we're using Polymetis, you should use the following to launch the robot & gripper controllers:
+As we're using Polymetis, you should use the following to launch the robot controller:
     > launch_robot.py --config-path /home/iliad/Projects/oncorr/conf/robot --config-name robot_launch.yaml timeout=15;
+    > launch_gripper.py --config-path /home/iliad/Projects/oncorr/conf/robot --config-name gripper_launch.yaml;
+
+References:
+    - https://github.com/facebookresearch/fairo/blob/main/polymetis/examples/2_impedance_control.py
+    - https://github.com/AGI-Labs/franka_control/blob/master/record.py
+    - https://github.com/AGI-Labs/franka_control/blob/master/playback.py
 """
 import logging
 import os
 import time
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import grpc
@@ -21,6 +28,7 @@ import torchcontrol as toco
 from gym import Env
 from polymetis import GripperInterface, RobotInterface
 from scipy.spatial.transform import Rotation as R
+from tap import Tap
 
 
 # Suppress PyGame Import Text
@@ -44,17 +52,25 @@ HOMES = {"default": [0.0, -np.pi / 4.0, 0.0, -3.0 * np.pi / 4.0, 0.0, np.pi / 2.
 #   > Ref: Gripper constants from: https://frankaemika.github.io/libfranka/grasp_object_8cpp-example.html
 GRIPPER_SPEED, GRIPPER_FORCE, GRIPPER_MAX_WIDTH = 0.5, 120, 0.08570
 
-# Joint Impedance Controller gains...
+# Joint Impedance Controller gains (used mostly for recording kinesthetic demos & playback)
 #   =>> Libfranka Defaults (https://frankaemika.github.io/libfranka/joint_impedance_control_8cpp-example.html)
-KQ_GAINS, KQD_GAINS = {"default": [600, 600, 600, 600, 250, 150, 50]}, {"default": [50, 50, 50, 50, 30, 25, 15]}
+KQ_GAINS = {
+    "record": [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+    "default": [600, 600, 600, 600, 250, 150, 50],
+}
+KQD_GAINS = {
+    "record": [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+    "default": [50, 50, 50, 50, 30, 25, 15],
+}
 
-# End-Effector Impedance Controller gains...
+# End-Effector Impedance Controller gains (known to be not great...)
+#   Issue Ref: https://github.com/facebookresearch/fairo/issues/1280#issuecomment-1182727019)
 #   =>> P :: Libfranka Defaults (https://frankaemika.github.io/libfranka/cartesian_impedance_control_8cpp-example.html)
 #   =>> D :: Libfranka Defaults = int(2 * sqrt(KP))
 KX_GAINS = {"default": [150, 150, 150, 10, 10, 10], "teleoperate": [200, 200, 200, 10, 10, 10]}
 KXD_GAINS = {"default": [25, 25, 25, 7, 7, 7], "teleoperate": [50, 50, 50, 7, 7, 7]}
 
-# Resolved Rate Controller Gains =>> should get lower as you get to the end-effector...
+# Resolved Rate Controller Gains =>> (should be default EE controller...)
 KRR_GAINS = {"default": [50, 50, 50, 50, 30, 20, 10]}
 # fmt: on
 
@@ -175,6 +191,7 @@ class FrankaEnv(Env):
         hz: int,
         controller: str = "cartesian",
         mode: str = "default",
+        use_camera: bool = False,
         use_gripper: bool = False,
     ) -> None:
         """
@@ -183,13 +200,18 @@ class FrankaEnv(Env):
         :param home: Default home position (specified as a string index into `HOMES` above!
         :param hz: Default policy control hz; somewhere between 20-40 is a good range.
         :param controller: Which impedance controller to use in < joint | cartesian | osc >
-        :param mode: Mode in < "default" | ... > -- used to set P(D) gains!
+        :param mode: Mode in < "default" | ... > --  used to set P(D) gains!
+        :param use_camera: Boolean whether to initialize the Camera connection for recording visual states (WIP)
         :param use_gripper: Boolean whether to initialize the Gripper controller (default: False)
         """
         self.home, self.rate, self.mode, self.controller, self.curr_step = home, Rate(hz), mode, controller, 0
         self.current_joint_pose, self.current_ee_pose, self.current_ee_rot = None, None, None
         self.robot, self.kp, self.kpd = None, None, None
         self.use_gripper, self.gripper, self.current_gripper_state, self.gripper_is_open = use_gripper, None, None, True
+
+        # TODO(siddk) :: Add camera support...
+        if use_camera:
+            raise NotImplementedError("Camera support not yet implemented!")
 
         # Initialize Robot and PD Controller
         self.reset()
@@ -247,6 +269,9 @@ class FrankaEnv(Env):
         self.robot_setup(self.home)
         return self.get_obs()
 
+    def set_mode(self, mode: str) -> None:
+        self.mode = mode
+
     def get_obs(self) -> Dict[str, np.ndarray]:
         new_joint_pose = self.robot.get_joint_positions().numpy()
         new_ee_pose = np.concatenate([a.numpy() for a in self.robot.get_ee_pose()])
@@ -254,6 +279,7 @@ class FrankaEnv(Env):
 
         if self.use_gripper:
             new_gripper_state = self.gripper.get_state()
+
             # Note that deltas are "shifted" 1 time step to the right from the corresponding "state"
             obs = {
                 "q": new_joint_pose,
@@ -359,113 +385,172 @@ class FrankaEnv(Env):
         time.sleep(1)
 
 
-# === Logitech Gamepad/Joystick Controller ===
-class JoystickControl:
-    def __init__(self, scale: Tuple[float, ...] = (0.25, 0.25, 0.25, 0.75, 0.75, 0.75)) -> None:
+class Buttons(object):
+    def __init__(self) -> None:
         pygame.init()
         self.gamepad = pygame.joystick.Joystick(0)
         self.gamepad.init()
-        self.deadband, self.scale = 0.1, scale
 
-    def input(self) -> Tuple[np.ndarray, bool, bool, bool, bool, bool]:
+    def input(self) -> Tuple[bool, bool, bool]:
+        # Get "A", "X", "Y" Button Presses
         pygame.event.get()
-
-        # Reference for the various Joystick `get_axis(i)` --> this is mostly applicable to the Logitech Gamepad...
-        #   =>> axis = 0 :: Left Joystick -- right is positive, left is negative (*ignored*)
-        #   =>> axis = 1 :: Left Joystick -- up is negative, down is positive (*used for z/yaw control*)
-        #   =>> axis = 2 :: Left Trigger -- "off" is negative, "on" is positive (*ignored*)
-        #
-        #   =>> axis = 3 :: Right Joystick -- right is positive, left is negative (*used for x/roll control*)
-        #   =>> axis = 4 :: Right Joystick -- up is negative, down is positive (*used for y/pitch control*)
-        #   =>> axis = 5 :: Right Trigger -- "off" is negative, "on" is positive (*used for mode-switching*)
-
-        # Directly compute end-effector velocities from joystick inputs -- switch on right-trigger
-        mode = "linear" if self.gamepad.get_axis(5) < 0 else "angular"
-        ee_dot = np.zeros(6)
-
-        # Iterate through three axes (x/roll, y/pitch, z/yaw) --> in that order (flipping signs for the latter two axes)
-        if mode == "linear":
-            x, y, z = -self.gamepad.get_axis(4), -self.gamepad.get_axis(3), -self.gamepad.get_axis(1)
-            ee_dot[:3] = [vel * self.scale[i] if abs(vel) >= self.deadband else 0 for i, vel in enumerate([x, y, z])]
-        else:
-            r, p, y = -self.gamepad.get_axis(3), -self.gamepad.get_axis(4), -self.gamepad.get_axis(0)
-            ee_dot[3:] = [vel * self.scale[i + 3] if abs(vel) >= self.deadband else 0 for i, vel in enumerate([r, p, y])]
-
-        # Button Press
-        a, b = self.gamepad.get_button(0), self.gamepad.get_button(1)
-        x, y, stop = self.gamepad.get_button(2), self.gamepad.get_button(3), self.gamepad.get_button(7)
-
-        return ee_dot, a, b, x, y, stop
+        a, x, y = self.gamepad.get_button(0), self.gamepad.get_button(2), self.gamepad.get_button(3)
+        return a, x, y
 
 
-def teleoperate() -> None:
-    """Run 6-DoF Teleoperation w/ a Joystick --> 2 modes, 3 Joystick axes :: (x, y, z) || (roll, pitch, yaw)."""
+class ArgumentParser(Tap):
+    # fmt: off
+    task: str                                           # Task ID for demonstration collection
+    data_dir: Path = Path("data/demos/")                # Path to parent directory for saving demonstrations
 
-    # Resolved Rate Controller...
-    cfg = {
-        "id": "default-resolved-rate",
-        "home": "default",
-        "hz": HZ,
-        "controller": "resolved-rate",
-        "mode": "default",
-        "step_size": 0.05,
-    }
+    # Task Parameters
+    include_visual_states: bool = False                 # Whether to run playback/get visual states (only False for now)
+    max_time_per_demo: int = 15                         # Max time (in seconds) to record demo -- default = 21 seconds
 
-    # EE Impedance Controller...
-    # cfg = {
-    #     "id": "default-ee-impedance",
-    #     "home": "default",
-    #     "hz": HZ,
-    #     "controller": "cartesian",
-    #     # "mode": "default",
-    #     "mode":"teleoperate",
-    #     "step_size": 0.05,
-    # }
+    # Collection Parameters
+    collection_strategy: str = "kinesthetic"            # How demos are collected :: only `kinesthetic` for now!
+    controller: str = "joint"                           # Demonstration & playback uses a Joint Impedance controller...
+    resume: bool = True                                 # Resume demonstration collection (on by default)
+    # fmt: on
 
-    print(f"[*] Attempting teleoperation with motion controller `{cfg['controller']}` and `{cfg['id']}` config:")
-    for key in cfg:
-        print(f"\t`{key}` =>> `{cfg[key]}`")
 
-    # Initialize Joystick...
-    print("[*] Connecting to Joystick...")
-    joystick = JoystickControl()
+def demonstrate() -> None:
+    args = ArgumentParser().parse_args()
 
-    # Initialize environment & get initial poses...
+    # Make directories for "raw" recorded states, and playback RGB states...
+    #   > Note: the "record" + "playback" split is use for "kinesthetic" demos for obtaining visual state w/o humans!
+    demo_raw_dir = args.data_dir / args.task / "record-raw"
+    os.makedirs(demo_raw_dir, exist_ok=args.resume)
+    if args.include_visual_states:
+        demo_rgb_dir = args.data_dir / args.task / "playback-rgb"
+        os.makedirs(demo_rgb_dir, exist_ok=args.resume)
+
+    # Initialize environment in `record` mode...
     print("[*] Initializing Robot Connection...")
     env = FrankaEnv(
-        home=cfg["home"],
-        hz=cfg["hz"],
-        controller=cfg["controller"],
-        mode=cfg["mode"],
-        step_size=cfg["step_size"],
-        use_gripper=True,
+        home="default",
+        hz=HZ,
+        controller=args.controller,
+        mode="record",
+        use_camera=False,
+        use_gripper=False,
     )
 
-    print("[*] Dropping into Teleoperation Loop...")
-    try:
-        while True:
-            # Measure Joystick Input
-            endeff_velocities, _, b, _, _, stop = joystick.input()
+    # Initializing Button Control... TODO(siddk) -- switch with ASR
+    print("[*] Connecting to Button Controller...")
+    buttons, demo_index = Buttons(), 1
 
-            if stop:
-                # Gracefully exit...
+    # If `resume` -- get "latest" index
+    if args.resume:
+        files = os.listdir(demo_rgb_dir) if args.include_visual_states else os.listdir(demo_raw_dir)
+        if len(files) > 0:
+            demo_index = max([int(x.split("-")[-1].split(".")[0]) for x in files]) + 1
+
+    # Start Recording Loop
+    print("[*] Starting Demo Recording Loop...")
+    while True:
+        print(f"[*] Starting to Record Demonstration `{demo_index}`...")
+        demo_file = f"{args.task}-{datetime.now().strftime('%m-%d')}-{demo_index}.npz"
+
+        # Set `record`
+        env.set_mode("record")
+
+        # Reset environment & wait on user input...
+        env.reset()
+        print(
+            "[*] Ready to record!\n"
+            f"\tYou have `{args.max_time_per_demo}` secs to complete the demo, and can use (X) to stop recording.\n"
+            "\tPress (Y) to reset, and (A) to start recording!\n "
+        )
+
+        # Loop on valid button input...
+        a, _, y = buttons.input()
+        while not a and not y:
+            a, _, y = buttons.input()
+
+        # Reset if (Y)...
+        if y:
+            continue
+
+        # Go, go, go!
+        print("\t=>> Started recording... press (X) to terminate recording!")
+
+        # Drop into Recording Loop --> for `record` mode, we really only care about joint positions
+        #   =>> TODO(siddk) - handle Gripper?
+        joint_qs = []
+        for _ in range(int(args.max_time_per_demo * HZ) - 1):
+            # Get Button Input (only if True) --> handle extended button press...
+            _, x, _ = buttons.input()
+
+            # Terminate...
+            if x:
+                print("\tHit (X) - stopping recording...")
                 break
 
-            if b:
-                # Trigger Gripper...
-                env.step(endeff_velocities, delta=True, open_gripper=not env.gripper_is_open)
-
+            # Otherwise no termination, keep on recording...
             else:
-                # Otherwise, we're just running end-effector teleoperation
-                env.step(endeff_velocities, delta=True)
+                obs, _, _, _ = env.step(None)
+                joint_qs.append(obs["q"])
 
-    except KeyboardInterrupt:
-        # Just don't crash the program on Ctrl-C or Socket Error (Controller Death)
-        print("\n[*] Terminating...")
-
-    finally:
+        # Close Environment
         env.close()
+
+        # Save "raw" demonstration...
+        np.savez(str(demo_raw_dir / demo_file), hz=HZ, qs=joint_qs)
+
+        # Enter Phase 2 -- Playback (Optional if not `args.include_visual_states`)
+        do_playback = True
+        if args.include_visual_states:
+            print("[*] Entering Playback Mode - Please reset the environment to beginning and get out of the way!")
+        else:
+            # Loop on valid user button input...
+            print("[*] Optional -- would you like to replay demonstration? Press (A) to playback, and (X) to continue!")
+            a, x, _ = buttons.input()
+            while not a and not x:
+                a, x, _ = buttons.input()
+
+            # Skip Playback!
+            if x:
+                do_playback = False
+
+        # Special Playback Handling -- change gains, and replay!
+        if do_playback:
+            # TODO(siddk) -- handle Camera observation logging...
+            env.set_mode("default")
+
+            # Block on User Ready -- Robot will move, so this is for safety...
+            print("\tReady to playback! Get out of the way, and hit (A) to continue...")
+            a, _, _ = buttons.input()
+            while not a:
+                a, _, _ = buttons.input()
+
+            # Execute Trajectory
+            print("\tReplaying...")
+            for idx in range(len(joint_qs)):
+                env.step(joint_qs[idx])
+
+            # Close Environment
+            env.close()
+
+        # Move on?
+        print("Next? Press (A) to continue or (Y) to quit... or (X) to retry demo and skip save")
+
+        # Loop on valid button input...
+        a, x, y = buttons.input()
+        while not a and not y and not x:
+            a, x, y = buttons.input()
+
+        # Exit...
+        if y:
+            break
+
+        # Bump Index
+        if not x:
+            demo_index += 1
+
+    # And... that's all folks!
+    print("[*] Done Demonstrating -- Cleaning Up! Thanks 🤖🚀")
 
 
 if __name__ == "__main__":
-    teleoperate()
+    demonstrate()
