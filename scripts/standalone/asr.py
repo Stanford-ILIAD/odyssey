@@ -9,6 +9,7 @@ Note :: TTS requires `pydub and simpleaudio` installed!
 """
 from io import BytesIO
 
+import vosk
 from gtts import gTTS
 from pydub import AudioSegment
 from pydub.playback import play
@@ -16,6 +17,9 @@ from sounddevice import RawInputStream, query_devices
 from vosk import KaldiRecognizer
 from vosk import Model as VoskModel
 
+
+# Suppress Log Level
+vosk.SetLogLevel(50)
 
 # Constants
 MODE = "ASR"
