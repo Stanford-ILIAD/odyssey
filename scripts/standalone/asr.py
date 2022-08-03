@@ -4,6 +4,7 @@ asr.py
 Standalone script with automatic (streaming) speech recognition and text-to-speech (TTS) functionality. Speech
 recognition is handled offline via Vosk, while TTS requires internet access (to ping Google's TTS API).
 
+Note :: ASR requires `vosk and sounddevice` installed!
 Note :: TTS requires `pydub and simpleaudio` installed!
 """
 from io import BytesIO
@@ -11,15 +12,38 @@ from io import BytesIO
 from gtts import gTTS
 from pydub import AudioSegment
 from pydub.playback import play
+from sounddevice import RawInputStream, query_devices
+from vosk import KaldiRecognizer
+from vosk import Model as VoskModel
 
 
 # Constants
-MODE = "TTS"
+MODE = "ASR"
 
 
 def asr() -> None:
     if MODE == "ASR":
-        raise NotImplementedError("ASR support not yet implemented!")
+        print("[*] Dropping into microphone ASR loop...")
+
+        # Load sample rate directly from Microphone (assume Microphone is Device ID = 0)
+        samplerate = int(query_devices(0, "input")["default_samplerate"])
+
+        # By default loads the "smallest" model with the language code we specify...
+        model = VoskModel(lang="en-us")
+        recognizer = KaldiRecognizer(model, samplerate)
+
+        # Open Stream!
+        print("[*] Dropping into While Loop...")
+        with RawInputStream(samplerate=samplerate, blocksize=4096, device=0, dtype="int16", channels=1) as stream:
+            while True:
+                data, _ = stream.read(4096)
+                if recognizer.AcceptWaveform(bytes(data)):
+                    result = recognizer.Result()
+                    print(recognizer.Result())
+
+                    # Exit condition
+                    if "quit" in result["text"]:
+                        break
 
     elif MODE == "TTS":
         print("[*] Dropping into interactive TTS loop...")
@@ -40,6 +64,9 @@ def asr() -> None:
 
             # Speak!
             speak(utterance)
+
+    elif MODE == "ECHO":
+        print("[*] Call and Response Loop...")
 
 
 if __name__ == "__main__":

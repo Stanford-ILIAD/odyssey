@@ -1,5 +1,6 @@
-# Controller Class 
+# Controller Class
 import pygame
+
 
 class JoystickControl(object):
     def __init__(self, axis_range=2, axis_scale=3.0):
@@ -20,8 +21,7 @@ class JoystickControl(object):
                     z = 0.0
                 zs.append(z * self.AXIS_SCALE)
 
-                
-# Secret, Tri-Axial End Effector Control
+        # Secret, Tri-Axial End Effector Control
         else:
             for i in range(self.AXIS_RANGE):
                 z = self.gamepad.get_axis(i)
@@ -36,8 +36,9 @@ class JoystickControl(object):
         print(b)
         print(x)
         print(y)
-        
+
         return zs, a, b, x, y, stop
+
 
 if __name__ == "__main__":
     JoystickControl()
