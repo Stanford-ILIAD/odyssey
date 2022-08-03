@@ -24,9 +24,9 @@ def asr() -> None:
     elif MODE == "TTS":
         print("[*] Dropping into interactive TTS loop...")
         while True:
-            # utterance = input("\n[*] Enter text to speak aloud or (q)uit =>> ")
-            # if utterance in {"q", "quit"}:
-            #     break
+            utterance = input("\n[*] Enter text to speak aloud or (q)uit =>> ")
+            if utterance in {"q", "quit"}:
+                break
 
             # Modular "speak" function
             def speak(language: str) -> None:
@@ -39,9 +39,7 @@ def asr() -> None:
                     play(audio)
 
             # Speak!
-            speak("Hello, my name is Friday, and I'm pleased to meet you!")
-            break
-            # speak(utterance)
+            speak(utterance)
 
 
 if __name__ == "__main__":
