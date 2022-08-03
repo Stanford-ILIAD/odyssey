@@ -5,12 +5,13 @@ Standalone script with automatic (streaming) speech recognition and text-to-spee
 recognition is handled offline via Vosk, while TTS requires internet access (to ping Google's TTS API).
 
 Note :: ASR requires `vosk and sounddevice` installed!
-Note :: TTS requires `pydub and simpleaudio` installed!
+Note :: TTS requires `gtts and pydub and simpleaudio` installed!
 """
 import time
 from io import BytesIO
 
 import vosk
+import json
 from gtts import gTTS
 from pydub import AudioSegment
 from pydub.playback import play
@@ -74,7 +75,7 @@ def asr() -> None:
         print("[*] Call and Response Loop...")
 
         # Load sample rate directly from Microphone (assume Microphone is Device ID = 0)
-        samplerate = int(query_devices(0, "input")["default_samplerate"])
+        samplerate = int(query_devices(kind="input")["default_samplerate"])
 
         # By default loads the "smallest" model with the language code we specify...
         model = VoskModel(lang="en-us")
@@ -82,11 +83,14 @@ def asr() -> None:
 
         # Modular "listen" function (asyncio)
         def listen() -> str:
-            with RawInputStream(samplerate=samplerate, blocksize=4096, device=0, dtype="int16", channels=1) as s:
+            with RawInputStream(samplerate=samplerate, blocksize=4096, dtype="int16", channels=1) as s:
                 while True:
                     buffer, _ = s.read(4096)
-                    if recognizer.AcceptWaveform(bytes(data)):
-                        return recognizer.Result()["text"]
+                    if recognizer.AcceptWaveform(bytes(buffer)):
+                        result = recognizer.Result()
+                        if isinstance(result, str):
+                            result = json.loads(result)
+                        return result["text"]
 
         # Modular "speak" function
         def speak(language: str) -> None:
@@ -104,11 +108,13 @@ def asr() -> None:
         print("[*] Entering Main Control Loop...")
         while True:
             # Check for a spoken input (but don't block if there's not an input prepared...)
-            # captured = listen() ?
+            print("[*] Capturing...")
+            captured = listen()
+            print(f"[*] Received String `{captured}`")
 
             # If `captured` is non-empty, pass to "speak" to "echo via TTS" (in realistic setting, this blocks to handle
             #   different control flow -- e.g., calling different synchronous functions).
-            # speak(captured)
+            speak(captured)
 
             # Otherwise, continue with main compute loop...
             counter += 1
